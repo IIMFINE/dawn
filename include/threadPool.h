@@ -32,10 +32,12 @@ public:
     threadPool();
     void init(uint32_t threadNum = 1);
     int pushWorkQueue(callback_t cb);
+    void quitWorkThreadPool();
+
+private:
     void popWorkQueue(std::unique_lock<std::mutex> &&curQueueWorkQueue);
     void workThreadRun();
-    int producerThreadRun();
-public: //todo change to private
+private:
     uint8_t                             queueIndex;
     uint32_t                            workThreadNum;
     workQueue_t                         *curWorkQueue;
@@ -43,7 +45,7 @@ public: //todo change to private
     workQueue_t                         storeWorkQueue[2];  //use pingpong 
     std::vector<callback_t>             processWorkQueue;
     std::condition_variable             threadCond;
-    std::list<std::thread*>            threadManagerList;
+    std::list<std::thread*>             threadManagerList;
 };
 
 };
