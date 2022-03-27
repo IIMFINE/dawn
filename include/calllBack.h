@@ -8,6 +8,6 @@
 #include "type.h"
 
 typedef std::function<void()>  callback_t;
-
+typedef std::function<callback_t()> returnCallback_t;
 
 #endif

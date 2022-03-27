@@ -23,6 +23,10 @@ void memoryPool::init()
         int totalMemBlockNum = TOTAL_MEM_EACH_TYPE / memBlockSize;
         mallocMemory = (memoryNode_t*)malloc(TOTAL_MEM_EACH_TYPE);
         mallocLFNode = new LF_node_t<memoryNode_t>[totalMemBlockNum];
+
+        allCreateMem.push_back((void*)mallocMemory);
+        allCreateMem.push_back((void*)mallocLFNode);
+        
         memset(mallocMemory, 0x0, TOTAL_MEM_EACH_TYPE);
         LOG4CPLUS_DEBUG(DAWN_LOG, "init memory pool type "<< i <<" block num "<< totalMemBlockNum);
         if(mallocMemory != nullptr && mallocLFNode != nullptr)
@@ -40,6 +44,15 @@ void memoryPool::init()
             LOG4CPLUS_DEBUG(DAWN_LOG, "i alloc "<<i);
         }
     }
+}
+
+memoryPool::~memoryPool()
+{
+    for(auto freeMem : allCreateMem)
+    {
+        free(freeMem);
+    }
+    allCreateMem.clear();
 }
 
 memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
