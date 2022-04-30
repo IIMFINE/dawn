@@ -26,41 +26,21 @@ void threadPool::init(uint32_t workThreadNum)
     }
 }
 
-void threadPool::eventDriverThread(returnCallback_t returnCb)
+template<>
+int threadPool::pushWorkQueue<int>(int cb)
 {
-    while(1)
-    {
-        if(runThreadFlag == ENUM_THREAD_STATUS::RUN)
-        {
-            auto workThreadTask = returnCb();
-            if(pushWorkQueue(workThreadTask) != PROCESS_SUCCESS)
-            {
-                LOG4CPLUS_ERROR(DAWN_LOG, "push work task to queue wrong");
-            }
-        }
-        else if(runThreadFlag == ENUM_THREAD_STATUS::STOP)
-        {
-            std::this_thread::yield();
-        }
-        else if(runThreadFlag == ENUM_THREAD_STATUS::EXIT)
-        {
-            LOG4CPLUS_WARN(DAWN_LOG, "event thread exit");
-            break;
-        }
-    }
+    return PROCESS_SUCCESS;
 }
 
-void threadPool::setEventThread(returnCallback_t returnCb)
+template<>
+int threadPool::pushWorkQueue<uint8_t>(uint8_t cb)
 {
-    threadList.push_back(new std::thread(&threadPool::eventDriverThread, this, returnCb));
+    return PROCESS_SUCCESS;
 }
 
-int threadPool::pushWorkQueue(callback_t cb)
+template<>
+int threadPool::pushWorkQueue<char>(char cb)
 {
-    std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
-    storeWorkQueue.workQueue.push_back(cb);
-    writeQueueLock.unlock();
-    threadCond.notify_one();
     return PROCESS_SUCCESS;
 }
 
@@ -88,14 +68,14 @@ void threadPool::haltAllThreads()
     runThreadFlag = ENUM_THREAD_STATUS::STOP;
 }
 
-void threadPool::popWorkQueue(std::vector<callback_t> &TL_processedQueue)
+void threadPool::popWorkQueue(std::vector<funcWarpper> &TL_processedQueue)
 {
     TL_processedQueue.swap(storeWorkQueue.workQueue);
 }
 
 void threadPool::workThreadRun()
 {
-    std::vector<callback_t>   TL_processedQueue;
+    std::vector<funcWarpper>   TL_processedQueue;
     size_t  processedQueueSize = 0;
     for(;runThreadFlag != ENUM_THREAD_STATUS::EXIT;)
     {

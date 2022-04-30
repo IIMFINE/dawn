@@ -98,7 +98,6 @@ public:
     virtual int createMultiIOInstance() = 0;
     virtual int addFd(int fd, constractSocket *socket) = 0;
     virtual int removeFd(int fd) = 0;
-    virtual callback_t waitMessage() = 0;
     virtual int setEventCallback() = 0;
 };
 
@@ -111,8 +110,8 @@ public:
     virtual int createMultiIOInstance();
     virtual int addFd(int fd,constractSocket *socket, int eventType = EPOLLIN);
     virtual int removeFd(int fd);
-    virtual callback_t waitMessage();
     virtual int setEventProcessor(eventProcessSubject*);
+    auto waitMessage();
     int insertFdSocketMap(int fd, constractSocket *socket);
     int removeFdSocketMap(int fd);
 protected:

@@ -373,7 +373,7 @@ int epollMultiIOManager::setEventProcessor(eventProcessSubject*)
     return PROCESS_SUCCESS;
 }
 
-callback_t epollMultiIOManager::waitMessage()
+auto epollMultiIOManager::waitMessage()
 {
     int triggerEventNum = 0;
     struct epoll_event *triggerEvent = nullptr;

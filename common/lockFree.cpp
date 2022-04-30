@@ -69,7 +69,6 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
     {
         LOG4CPLUS_WARN(DAWN_LOG,"warn: traverse the LF queue to end ");
         return nullptr;
-        // std::cout<<"warn: end the LF queue is empty "<<std::endl;
     }
     else
     {

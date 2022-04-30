@@ -13,13 +13,13 @@
 #include <vector>
 #include <condition_variable>
 #include <list>
-#include "calllBack.h"
+#include "setLogger.h"
+#include "funcWrapper.h"
 
 namespace net
 {
 class threadPool;
 class threadPoolManager;
-
 
 class threadPool
 {
@@ -35,20 +35,59 @@ enum class ENUM_THREAD_STATUS
 struct workQueue_t
 {
     std::mutex queueMutex;
-    std::vector<callback_t>  workQueue;
+    std::vector<funcWarpper>  workQueue;
 };
 
     threadPool();
     ~threadPool() = default;
     void init(uint32_t workThreadNum = 1);
-    void eventDriverThread(returnCallback_t returnCb);
-    void setEventThread(returnCallback_t cb);
-    int pushWorkQueue(callback_t cb);
+
+    template<typename FUNC_T>
+    void eventDriverThread(FUNC_T returnCb)
+    {
+        while(1)
+        {
+            if(runThreadFlag == ENUM_THREAD_STATUS::RUN)
+            {
+                auto workTask = returnCb();
+                if(pushWorkQueue(workTask) != PROCESS_SUCCESS)
+                {
+                    LOG4CPLUS_ERROR(DAWN_LOG, "push work task to queue wrong");
+                }
+            }
+            else if(runThreadFlag == ENUM_THREAD_STATUS::STOP)
+            {
+                std::this_thread::yield();
+            }
+            else if(runThreadFlag == ENUM_THREAD_STATUS::EXIT)
+            {
+                LOG4CPLUS_WARN(DAWN_LOG, "event thread exit");
+                break;
+            }
+        }
+    }
+
+    template<typename FUNC_T>
+    void setEventThread(FUNC_T returnCb)
+    {
+        threadList.push_back(new std::thread(&threadPool::eventDriverThread<FUNC_T>, this, returnCb));
+    }
+
+    template<typename FUNC_T>
+    int pushWorkQueue(FUNC_T cb)
+    {
+        std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
+        storeWorkQueue.workQueue.emplace_back(cb);
+        writeQueueLock.unlock();
+        threadCond.notify_one();
+        return PROCESS_SUCCESS;
+    }
+
     void quitAllThreads();
     void haltAllThreads();
     void runAllThreads();
 private:
-    void popWorkQueue(std::vector<callback_t> &TL_processedQueue);
+    void popWorkQueue(std::vector<funcWarpper> &TL_processedQueue);
     void workThreadRun();
 private:
     volatile ENUM_THREAD_STATUS                 runThreadFlag = ENUM_THREAD_STATUS::STOP;
@@ -56,6 +95,15 @@ private:
     std::condition_variable                     threadCond;
     std::vector<std::thread*>                   threadList;
 };
+
+template<>
+int threadPool::pushWorkQueue<int>(int cb);
+
+template<>
+int threadPool::pushWorkQueue<uint8_t>(uint8_t cb);
+
+template<>
+int threadPool::pushWorkQueue<char>(char cb);
 
 class threadPoolManager
 {
