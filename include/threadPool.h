@@ -49,8 +49,7 @@ struct workQueue_t
         {
             if(runThreadFlag == ENUM_THREAD_STATUS::RUN)
             {
-                auto workTask = returnCb();
-                if(pushWorkQueue(workTask) != PROCESS_SUCCESS)
+                if(pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
                 {
                     LOG4CPLUS_ERROR(DAWN_LOG, "push work task to queue wrong");
                 }
@@ -74,10 +73,10 @@ struct workQueue_t
     }
 
     template<typename FUNC_T>
-    int pushWorkQueue(FUNC_T cb)
+    int pushWorkQueue(FUNC_T workTask)
     {
         std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
-        storeWorkQueue.workQueue.emplace_back(cb);
+        storeWorkQueue.workQueue.emplace_back(workTask);
         writeQueueLock.unlock();
         threadCond.notify_one();
         return PROCESS_SUCCESS;
