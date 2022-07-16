@@ -26,24 +26,6 @@ void threadPool::init(uint32_t workThreadNum)
     }
 }
 
-template<>
-int threadPool::pushWorkQueue<int>(int cb)
-{
-    return PROCESS_SUCCESS;
-}
-
-template<>
-int threadPool::pushWorkQueue<uint8_t>(uint8_t cb)
-{
-    return PROCESS_SUCCESS;
-}
-
-template<>
-int threadPool::pushWorkQueue<char>(char cb)
-{
-    return PROCESS_SUCCESS;
-}
-
 void threadPool::quitAllThreads()
 {
     runThreadFlag = ENUM_THREAD_STATUS::EXIT;

@@ -73,12 +73,24 @@ struct workQueue_t
     }
 
     template<typename FUNC_T>
-    int pushWorkQueue(FUNC_T workTask)
+    int pushWorkQueue(FUNC_T&& workTask)
+    {
+        return pushWorkQueueImpl(std::forward<FUNC_T>(workTask));
+    }
+
+    template<typename T ,std::enable_if_t<special_type_traitor::is_callable<T>::value, int> = 0>
+    int pushWorkQueueImpl(T&& workTask)
     {
         std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
         storeWorkQueue.workQueue.emplace_back(workTask);
         writeQueueLock.unlock();
         threadCond.notify_one();
+        return PROCESS_SUCCESS;
+    }
+
+    template<typename T ,std::enable_if_t<!special_type_traitor::is_callable<T>::value, int> = 0>
+    int pushWorkQueueImpl(T&& workTask)
+    {
         return PROCESS_SUCCESS;
     }
 
@@ -94,15 +106,6 @@ private:
     std::condition_variable                     threadCond;
     std::vector<std::thread*>                   threadList;
 };
-
-template<>
-int threadPool::pushWorkQueue<int>(int cb);
-
-template<>
-int threadPool::pushWorkQueue<uint8_t>(uint8_t cb);
-
-template<>
-int threadPool::pushWorkQueue<char>(char cb);
 
 class threadPoolManager
 {

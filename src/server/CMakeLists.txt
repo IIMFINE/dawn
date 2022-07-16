@@ -1,5 +1,5 @@
 
-add_compile_options(-Wall -g -std=c++14)
+add_compile_options(-Wall -g -std=c++17)
 set(OUTPUT_EXEC_FILE server_app)
 set(DIR_HEAD_FILE ${CMAKE_SOURCE_DIR}/include)            #set head file directory
 set(DIR_SRC ${CMAKE_CURRENT_SOURCE_DIR})                            #set source file directory
