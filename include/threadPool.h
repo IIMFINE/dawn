@@ -121,13 +121,13 @@ public:
         {
             std::initializer_list<int>{(uniPtr_spyThreadPool->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
         }
-        spyThreadPoolGroup.push_back(std::move(uniPtr_spyThreadPool));
+        spyThreadPoolGroup_.push_back(std::move(uniPtr_spyThreadPool));
     }
     void threadPoolExecute();
     void threadPoolHalt();
     void threadPoolDestory();
 private:
-    std::vector<std::unique_ptr<threadPool>>         spyThreadPoolGroup;
+    std::vector<std::unique_ptr<threadPool>>         spyThreadPoolGroup_;
 };
 
 };

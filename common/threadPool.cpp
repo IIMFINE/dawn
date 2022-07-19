@@ -78,7 +78,7 @@ void threadPool::workThreadRun()
 
 void threadPoolManager::threadPoolExecute()
 {
-    for(auto &it : spyThreadPoolGroup)
+    for(auto &it : spyThreadPoolGroup_)
     {
         it->runAllThreads();
     }
@@ -86,7 +86,7 @@ void threadPoolManager::threadPoolExecute()
 
 void threadPoolManager::threadPoolHalt()
 {
-    for(auto &it : spyThreadPoolGroup)
+    for(auto &it : spyThreadPoolGroup_)
     {
         it->haltAllThreads();
     }
@@ -95,7 +95,7 @@ void threadPoolManager::threadPoolHalt()
 
 void threadPoolManager::threadPoolDestory()
 {
-    for(auto &it : spyThreadPoolGroup)
+    for(auto &it : spyThreadPoolGroup_)
     {
         it->quitAllThreads();
     }

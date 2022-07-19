@@ -10,17 +10,17 @@
 
 namespace net
 {
-std::string& constractSocket::getSouceIpAddr()
+std::string& abstractSocket::getSouceIpAddr()
 {
-    return sourceIpString;
+    return sourceIpStr_;
 }
 
-int constractSocket::getBindFd()
+int abstractSocket::getBindFd()
 {
-    return bindFd;
+    return bindFd_;
 }
 
-int constractSocket::translateStringToIpAddr(const std::string& ipString, struct sockaddr_in *ipAddr_in)
+int abstractSocket::translateStringToIpAddr(const std::string& ipString, struct sockaddr_in *ipAddr_in)
 {
     uint32_t portPos = 0;
 
@@ -53,8 +53,8 @@ int constractSocket::translateStringToIpAddr(const std::string& ipString, struct
 
 udpSocket::udpSocket()
 {
-    bindFd = INVALID_VALUE;
-    sourceIpString.clear();
+    bindFd_ = INVALID_VALUE;
+    sourceIpStr_.clear();
 }
 
 int udpSocket::initialize(const std::string &ipAddr)
@@ -73,11 +73,11 @@ int udpSocket::initialize(const std::string &ipAddr)
 int udpSocket::bindSocket(const std::string &ipAddr)
 {
     std::cout<< "info: now bind the this ip " << ipAddr <<std::endl;
-    sourceIpString = ipAddr;
+    sourceIpStr_ = ipAddr;
 
-    bindFd = socket(PF_INET, SOCK_DGRAM, 0);
+    bindFd_ = socket(PF_INET, SOCK_DGRAM, 0);
 
-    if(bindFd == -1)
+    if(bindFd_ == -1)
     {
         LINUX_ERROR_PRINT();
         std::cout<<"error: cant create udp fd "<<std::endl;
@@ -91,9 +91,9 @@ int udpSocket::bindSocket(const std::string &ipAddr)
         return PROCESS_FAIL;
     }
 
-    bindIpAddr = bindIpAddr_in;
+    clientIpAddr_ = bindIpAddr_in;
 
-    if(bind(bindFd, (struct sockaddr*)&bindIpAddr_in, sizeof(struct sockaddr_in)) == -1)
+    if(bind(bindFd_, (struct sockaddr*)&bindIpAddr_in, sizeof(struct sockaddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
         std::cout<< "error: cant bind the this ip " << ipAddr <<std::endl;
@@ -112,7 +112,7 @@ int udpSocket::sent2Socket(char *data, uint32_t dataLen, const std::string &send
         return PROCESS_FAIL;
     }
 
-    if(sendto(bindFd, data, dataLen, 0, (struct sockaddr*)&sendIpAddr_in, sizeof(sendIpAddr_in)) == -1)
+    if(sendto(bindFd_, data, dataLen, 0, (struct sockaddr*)&sendIpAddr_in, sizeof(sendIpAddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
         std::cout<<"error: cant send data "<<std::endl;
@@ -123,8 +123,8 @@ int udpSocket::sent2Socket(char *data, uint32_t dataLen, const std::string &send
 int udpSocket::recvFromSocket(char *recvData, size_t dataBuffLen)
 {
     ssize_t recvDataLen = 0;
-    socklen_t ipAddrLen = sizeof(recvIpAddr);
-    if((recvDataLen = recvfrom(bindFd, recvData, dataBuffLen, 0, (struct sockaddr*)&recvIpAddr, &ipAddrLen)) == -1)
+    socklen_t ipAddrLen = sizeof(clientIpAddr_);
+    if((recvDataLen = recvfrom(bindFd_, recvData, dataBuffLen, 0, (struct sockaddr*)&clientIpAddr_, &ipAddrLen)) == -1)
     {
         LINUX_ERROR_PRINT();
         std::cout <<"error: cant recv data"<<std::endl;
@@ -136,19 +136,25 @@ int udpSocket::recvFromSocket(char *recvData, size_t dataBuffLen)
 
 udpSocket::~udpSocket()
 {
-    close(bindFd);
-    sourceIpString.clear();
+    close(bindFd_);
+    sourceIpStr_.clear();
 }
 
 tcpSocket::tcpSocket()
 {
-    bindFd = INVALID_VALUE;
-    sourceIpString.clear();
+    bindFd_ = INVALID_VALUE;
+    sourceIpStr_.clear();
 }
 
-int tcpSocket::initialize(const std::string &ipAddr)
+tcpSocket::tcpSocket(int acceptFd, struct sockaddr_in clientIpAddr)
 {
-    if(bindSocket(ipAddr) == PROCESS_FAIL)
+    bindFd_ = acceptFd;
+    clientIpAddr_ = clientIpAddr;
+}
+
+int tcpSocket::initialize(const std::string &sourceIpAddr)
+{
+    if(bindSocket(sourceIpAddr) == PROCESS_FAIL)
     {
         std::cout<<"error: udp initialize fail"<<std::endl;
         return PROCESS_FAIL;
@@ -159,87 +165,87 @@ int tcpSocket::initialize(const std::string &ipAddr)
 /*
 *input: e.g: 192.168.1.1:2152
 */
-int tcpSocket::bindSocket(const std::string &ipAddr)
+int tcpSocket::bindSocket(const std::string &sourceIpAddr)
 {
-    std::cout<< "info: now bind the this ip " << ipAddr <<std::endl;
-    sourceIpString = ipAddr;
+    std::cout<< "info: now bind the this ip " << sourceIpAddr <<std::endl;
+    sourceIpStr_ = sourceIpAddr;
 
-    bindFd = socket(PF_INET, SOCK_STREAM, 0);
+    bindFd_ = socket(PF_INET, SOCK_STREAM, 0);
 
-    if(bindFd == -1)
+    if(bindFd_ == -1)
     {
         LINUX_ERROR_PRINT();
         std::cout<<"error: cant create udp fd "<<std::endl;
         return PROCESS_FAIL;
     }
 
-    struct sockaddr_in bindIpAddr_in;
+    struct sockaddr_in clientIpAddr_in;
 
-    if(translateStringToIpAddr(ipAddr, &bindIpAddr_in) == PROCESS_FAIL)
+    if(translateStringToIpAddr(sourceIpAddr, &clientIpAddr_in) == PROCESS_FAIL)
     {
         return PROCESS_FAIL;
     }
 
-    bindIpAddr = bindIpAddr_in;
+    clientIpAddr_ = clientIpAddr_in;
 
-    if(bind(bindFd, (struct sockaddr*)&bindIpAddr_in, sizeof(struct sockaddr_in)) == -1)
+    if(bind(bindFd_, (struct sockaddr*)&clientIpAddr_in, sizeof(struct sockaddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<< "error: cant bind the this ip " << ipAddr <<std::endl;
+        std::cout<< "error: cant bind the this ip " << sourceIpAddr <<std::endl;
         return PROCESS_FAIL;
     }
     return PROCESS_SUCCESS;
 }
 
 tcpAcceptor::tcpAcceptor(int givenBindFd):
-acceptFd(INVALID_VALUE)
+acceptFd_(INVALID_VALUE)
 {
-    bindFd = givenBindFd;
+    bindFd_ = givenBindFd;
 }
 
 
 tcpAcceptor::~tcpAcceptor()
 {
-    if(acceptFd != INVALID_VALUE)
+    if(acceptFd_ != INVALID_VALUE)
     {
-        close(acceptFd);
+        close(acceptFd_);
     }
 }
 
 int tcpAcceptor::accept2Socket()
 {
-    if(bindFd != INVALID_VALUE)
+    if(bindFd_ != INVALID_VALUE)
     {
         socklen_t addrSize =  sizeof(struct sockaddr);
-        acceptFd = accept(bindFd, (struct sockaddr*)&recvIpAddr, &addrSize);
+        acceptFd_ = accept(bindFd_, (struct sockaddr*)&clientIpAddr_, &addrSize);
 
-        if(acceptFd < 0)
+        if(acceptFd_ < 0)
         {
             LINUX_ERROR_PRINT();
             std::cout<<"error: TCP cant accept this connect"<<std::endl;
             return PROCESS_FAIL;
         }
-        clientIpString = inet_ntoa(recvIpAddr.sin_addr);
-        std::cout<<"debug: now accept "<<clientIpString<<std::endl;
+        clientIpString_ = inet_ntoa(clientIpAddr_.sin_addr);
+        std::cout<<"debug: now accept "<<clientIpString_<<std::endl;
         //IO detach, in order to improve the big data transfer performance
-        readFd = fdopen(acceptFd, "r");
-        writeFd = fdopen(acceptFd, "a");
+        readFd_ = fdopen(acceptFd_, "r");
+        writeFd_ = fdopen(acceptFd_, "a");
     }
     return PROCESS_SUCCESS;
 }
 
 int tcpAcceptor::sent2Socket(char *data, uint32_t dataLen, const std::string &sendIpAddr)
 {
-    if(acceptFd > 0)
+    if(acceptFd_ > 0)
     {
         uint32_t sendLen = 0;
         int fputsReturnValue = 0;
         for(;dataLen < sendLen;)
         {
-            if((fputsReturnValue = fputs(data + sendLen, writeFd)) != EOF)
+            if((fputsReturnValue = fputs(data + sendLen, writeFd_)) != EOF)
             {
                 sendLen += (uint32_t)fputsReturnValue;
-                fflush(writeFd);
+                fflush(writeFd_);
             }
             else
             {
@@ -255,10 +261,10 @@ int tcpAcceptor::sent2Socket(char *data, uint32_t dataLen, const std::string &se
 
 int tcpAcceptor::recvFromSocket(char *recvData, size_t dataBuffLen)
 {
-    if(acceptFd > 0)
+    if(acceptFd_ > 0)
     {
         //todo: change to use TLV method, must consider about image and other type file transport, expect of text file.
-        fgets(recvData, dataBuffLen, readFd);
+        fgets(recvData, dataBuffLen, readFd_);
 
         return PROCESS_SUCCESS;
     }
@@ -266,8 +272,8 @@ int tcpAcceptor::recvFromSocket(char *recvData, size_t dataBuffLen)
 }
 
 epollMultiIOManager::epollMultiIOManager():
-epollFd(INVALID_VALUE),
-maxSpyFdNum(1)
+epollFd_(INVALID_VALUE),
+maxSpyFdNum_(1)
 {
 
 }
@@ -279,14 +285,12 @@ epollMultiIOManager::~epollMultiIOManager()
 
 int epollMultiIOManager::createMultiIOInstance()
 {
-    if((epollFd = epoll_create(maxSpyFdNum)) == INVALID_VALUE)
+    if((epollFd_ = epoll_create(maxSpyFdNum_)) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
         std::cout<< "error: cant create epoll fd"<<std::endl;
         return PROCESS_FAIL;
     }
-
-    timeout = timeout;
 
     return PROCESS_SUCCESS;
 }
@@ -295,7 +299,7 @@ int epollMultiIOManager::initialize(int timeout, int maxFdNum)
 {
     if(maxFdNum > 0)
     {
-        maxSpyFdNum = maxFdNum;
+        maxSpyFdNum_ = maxFdNum;
     }
     if(createMultiIOInstance() == PROCESS_FAIL)
     {
@@ -303,18 +307,18 @@ int epollMultiIOManager::initialize(int timeout, int maxFdNum)
         return PROCESS_FAIL;
     }
 
-    timeout = timeout;
+    timeout_ = timeout;
 
     return PROCESS_SUCCESS;
 }
 
-int epollMultiIOManager::addFd(int addFd, constractSocket *socket, int eventType)
+int epollMultiIOManager::addFd(int addFd, abstractSocket *socket, int eventType)
 {
     struct epoll_event epollEvent;
     epollEvent.events = eventType;
     epollEvent.data.fd = addFd;
 
-    if(epoll_ctl(epollFd, EPOLL_CTL_ADD, addFd, &epollEvent) == INVALID_VALUE)
+    if(epoll_ctl(epollFd_, EPOLL_CTL_ADD, addFd, &epollEvent) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
         std::cout<<"error: cant add fd to epoll watch event "<<std::endl;
@@ -328,18 +332,23 @@ int epollMultiIOManager::addFd(int addFd, constractSocket *socket, int eventType
     return PROCESS_SUCCESS;
 };
 
+int epollMultiIOManager::addListenSocket(std::unique_ptr<abstractSocket>& uniq_listenSocket)
+{
+    uniq_listenSocket_ = std::move(uniq_listenSocket);
+    addFd(uniq_listenSocket_->getBindFd(), uniq_listenSocket_.get());
+    return PROCESS_SUCCESS;
+}
 
-int epollMultiIOManager::insertFdSocketMap(int fd, constractSocket *socket)
+int epollMultiIOManager::insertFdSocketMap(int fd, abstractSocket *socket)
 {
     auto iterator = fdSocketMap_.find(fd);
     if(iterator == fdSocketMap_.end())
     {
-        fdSocketMap_.insert(std::make_pair(fd, socket));
+        fdSocketMap_.emplace(fd, socket);
         return PROCESS_SUCCESS;
     }
 
     return PROCESS_FAIL;
-
 }
 
 int epollMultiIOManager::removeFdSocketMap(int fd)
@@ -357,12 +366,12 @@ int epollMultiIOManager::removeFdSocketMap(int fd)
 
 int epollMultiIOManager::removeFd(int deleteFd)
 {
-    if(epoll_ctl(epollFd, EPOLL_CTL_DEL, deleteFd, NULL) == INVALID_VALUE)
+    if(epoll_ctl(epollFd_, EPOLL_CTL_DEL, deleteFd, NULL) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
         std::cout<<"error: cant remove fd from epoll set"<<std::endl;
         return PROCESS_FAIL;
-    } 
+    }
 
     removeFdSocketMap(deleteFd);
     return PROCESS_SUCCESS;
@@ -375,13 +384,21 @@ int epollMultiIOManager::setEventProcessor(eventProcessSubject*)
 
 auto epollMultiIOManager::waitMessage()
 {
-    int triggerEventNum = 0;
     struct epoll_event *triggerEvent = nullptr;
-    triggerEventNum = epoll_wait(epollFd, triggerEvent, maxSpyFdNum, timeout);
-    
-    // return PROCESS_SUCCESS;
+    int triggerEventNum = epoll_wait(epollFd_, triggerEvent, maxSpyFdNum_, timeout_);
+    for(int i = 0;i < triggerEventNum; ++i)
+    {
+        handleEpollEvent(triggerEvent[i]);
+    }
 }
 
-
+inline int epollMultiIOManager::handleEpollEvent(struct epoll_event& event)
+{
+    int acceptFd = 0;
+    if(event.data.fd == uniq_listenSocket_->getBindFd())
+    {
+        // acceptFd = accept(uniq_listenSocket_->getBindFd(),);
+    }
+}
 
 };
