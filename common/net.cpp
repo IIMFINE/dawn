@@ -8,7 +8,7 @@
 #include <memory.h>
 #include "setLogger.h"
 
-namespace net
+namespace dawn
 {
 std::string& abstractSocket::getSouceIpAddr()
 {

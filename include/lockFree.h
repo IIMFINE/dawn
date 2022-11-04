@@ -1,22 +1,23 @@
 #ifndef _LOCK_FREE_H_
 #define _LOCK_FREE_H_
 #include <atomic>
+#include <thread>
 #include "type.h"
-namespace net
+#include "hazardPointer.h"
+#include "setLogger.h"
+namespace dawn
 {
 
 template<typename T>
 struct  LF_node_t
 {
-    LF_node_t()
+    LF_node_t():
+    elementVal_(nullptr),
+    next_(nullptr)
     {
-        refcnt.store(0);
-        next = nullptr;
-        elementVal = nullptr;
     }
-    T* elementVal;
-    LF_node_t *next;
-    std::atomic<int>  refcnt;
+    T* elementVal_;
+    LF_node_t *next_;
 
 };
 
@@ -34,12 +35,84 @@ public:
     void pushNode(LF_node_t<T> *node);
 };
 
-template class lockFreeStack<memoryNode_t>;
 
+template<typename T>
+lockFreeStack<T>::lockFreeStack():
+LF_queueHead(static_cast<LF_node_t<T>*>(nullptr))
+{
 }
 
+template<typename T>
+void lockFreeStack<T>::init(LF_node_t<T>* queueHead)
+{
+    LF_queueHead.store(queueHead);
+}
 
+template<typename T>
+void lockFreeStack<T>::pushNode(LF_node_t<T> *node)
+{
+    if(node != nullptr)
+    {
+        auto oldHead =  LF_queueHead.load(std::memory_order_acquire);
+        do
+        {
+            node->next_ = oldHead;
+        } while (!LF_queueHead.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
+    }
+    else
+    {
+        LOG_WARN( "a null node is pushed to queue");
+    }
+    return;
+}
 
+template<typename T>
+LF_node_t<T>* lockFreeStack<T>::popNode()
+{
+    LF_node_t<T> *oldNode = nullptr;
+    LF_node_t<T> *headNode = nullptr;
 
+    //Use hazard pointer to avoid the ABA problem
+    oldNode = LF_queueHead.load(std::memory_order_acquire);
+    do
+    {
+        if(oldNode == nullptr)
+        {
+            LOG_WARN("load the LF queue head is empty");
+            break;
+        }
+        else
+        {
+            do{
+                headNode = oldNode;
+                singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->setHazardPointer(headNode);
+                oldNode = LF_queueHead.load(std::memory_order_acquire);
+            } while (oldNode != headNode);
+            if(oldNode != nullptr && LF_queueHead.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
+            {
+                // Waiting hazard gone.
+                while(1)
+                {
+                    if(singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->findConflictPointer(oldNode) == true)
+                    {
+                        break;
+                    }
+                    std::this_thread::yield();
+                }
+                break;
+            }
+        }
+    } while (1);
+
+    if(oldNode == nullptr)
+    {
+        LOG_WARN("loop the LF queue to end ");
+        return nullptr;
+    }
+    oldNode->next_ = nullptr;
+    return oldNode;
+}
+
+}
 
 #endif

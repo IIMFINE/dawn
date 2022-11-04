@@ -1,9 +1,9 @@
-#ifndef _FUNC_WARPPER_H_
-#define _FUNC_WARPPER_H_
+#ifndef _FUNC_WRAPPER_H_
+#define _FUNC_WRAPPER_H_
 
-namespace net
+namespace dawn
 {
-class funcWarpper
+class funcWrapper
 {
     struct funcWrapperBaseImpl
     {
@@ -15,41 +15,41 @@ class funcWarpper
     struct funcWrapperDriveImpl: funcWrapperBaseImpl
     {
         funcWrapperDriveImpl(FUNC_T&& wrapperFunc):
-            warpperFunc_m(std::forward<FUNC_T>(wrapperFunc))
+            wrapperFunc_m(std::forward<FUNC_T>(wrapperFunc))
         {
         }
         virtual void call()
         {
-            warpperFunc_m();
+            wrapperFunc_m();
         }
-        FUNC_T warpperFunc_m;
+        FUNC_T wrapperFunc_m;
     };
 
 public:
-    funcWarpper(const funcWarpper&) = delete;
-    funcWarpper(funcWarpper&) = delete;
-    funcWarpper& operator=(const funcWarpper&) = delete;
+    funcWrapper(const funcWrapper&) = delete;
+    funcWrapper(funcWrapper&) = delete;
+    funcWrapper& operator=(const funcWrapper&) = delete;
 
     template<typename FUNC_T>
-    funcWarpper(FUNC_T givenFunc):
-        p_wrapedFunc(std::move(std::make_unique<funcWrapperDriveImpl<FUNC_T>>(std::move(givenFunc))))
+    funcWrapper(FUNC_T givenFunc):
+        p_wrappedFunc(std::move(std::make_unique<funcWrapperDriveImpl<FUNC_T>>(std::move(givenFunc))))
     {
     }
 
     //The move construct dont generate by implement.
-    funcWarpper(funcWarpper&& givenFuncWarpper):
-        p_wrapedFunc(std::move(givenFuncWarpper.p_wrapedFunc))
+    funcWrapper(funcWrapper&& givenFuncWrapper):
+        p_wrappedFunc(std::move(givenFuncWrapper.p_wrappedFunc))
     {
     }
     auto execFunc()
     {
-        p_wrapedFunc->call();
+        p_wrappedFunc->call();
     }
     auto operator()()
     {
         this->execFunc();
     }
-    std::unique_ptr<funcWrapperBaseImpl>  p_wrapedFunc;
+    std::unique_ptr<funcWrapperBaseImpl>  p_wrappedFunc;
 };
 
 };

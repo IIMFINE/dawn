@@ -16,7 +16,7 @@
 #include "setLogger.h"
 #include "funcWrapper.h"
 
-namespace net
+namespace dawn
 {
 class threadPool;
 class threadPoolManager;
@@ -35,7 +35,7 @@ enum class ENUM_THREAD_STATUS
 struct workQueue_t
 {
     std::mutex queueMutex;
-    std::vector<funcWarpper>  workQueue;
+    std::vector<funcWrapper>  workQueue;
 };
 
     threadPool();
@@ -98,7 +98,7 @@ struct workQueue_t
     void haltAllThreads();
     void runAllThreads();
 private:
-    void popWorkQueue(std::vector<funcWarpper> &TL_processedQueue);
+    void popWorkQueue(std::vector<funcWrapper> &TL_processedQueue);
     void workThreadRun();
 private:
     volatile ENUM_THREAD_STATUS                 runThreadFlag = ENUM_THREAD_STATUS::STOP;

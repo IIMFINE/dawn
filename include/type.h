@@ -14,11 +14,6 @@
 #define PROCESS_SUCCESS 1
 #define INVALID_VALUE  -1
 
-typedef unsigned int uint32_t;
-typedef unsigned char uint8_t;
-typedef unsigned short uint16_t;
-typedef unsigned long uint64_t;
-
 #define LINUX_ERROR_PRINT() printf("%s\n",strerror(errno));
 
 template<typename T>
@@ -26,6 +21,7 @@ class singleton
 {
 public:
     ~singleton();
+    singleton(singleton&) = delete;
     singleton(const singleton&) = delete;
     singleton& operator=(const singleton&) = delete;
     static T* getInstance()
@@ -34,13 +30,6 @@ public:
         return &instance;
     }
 };
-#pragma pack (1)
-struct memoryNode_t
-{
-    char      memoryBlockType;
-    char      memoryHead[0];
-};
-#pragma pack ()
 
 namespace special_type_traitor
 {

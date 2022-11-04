@@ -9,7 +9,7 @@
 #include <condition_variable>
 #include "threadPool.h"
 #include "setLogger.h"
-namespace net
+namespace dawn
 {
 
 
@@ -50,14 +50,14 @@ void threadPool::haltAllThreads()
     runThreadFlag = ENUM_THREAD_STATUS::STOP;
 }
 
-void threadPool::popWorkQueue(std::vector<funcWarpper> &TL_processedQueue)
+void threadPool::popWorkQueue(std::vector<funcWrapper> &TL_processedQueue)
 {
     TL_processedQueue.swap(storeWorkQueue.workQueue);
 }
 
 void threadPool::workThreadRun()
 {
-    std::vector<funcWarpper>   TL_processedQueue;
+    std::vector<funcWrapper>   TL_processedQueue;
     size_t  processedQueueSize = 0;
     for(;runThreadFlag != ENUM_THREAD_STATUS::EXIT;)
     {

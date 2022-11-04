@@ -1,4 +1,4 @@
-
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 add_compile_options(-Wall -g -std=c++17)
 set(OUTPUT_EXEC_FILE test_app)
 set(DIR_HEAD_FILE ${CMAKE_SOURCE_DIR}/include)            #set head file directory

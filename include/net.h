@@ -11,7 +11,7 @@
 #include "threadPool.h"
 #include <memory.h>
 
-namespace net
+namespace dawn
 {
 
 enum socketType_t

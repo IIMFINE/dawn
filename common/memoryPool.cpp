@@ -5,7 +5,7 @@
 #include "baseOperator.h"
 #include "setLogger.h"
 
-namespace net
+namespace dawn
 {
 
 memoryPool::memoryPool()
@@ -20,29 +20,27 @@ void memoryPool::init()
     for(int i = MIN_MEM_BLOCK_TYPE; i <= MAX_MEM_BLOCK_TYPE; ++i)
     {
         int memBlockSize = 1 << i;
-        int totalMemBlockNum = TOTAL_MEM_EACH_TYPE / memBlockSize;
-        mallocMemory = (memoryNode_t*)malloc(TOTAL_MEM_EACH_TYPE);
+        int totalMemBlockNum = TOTAL_MEM_SIZE / memBlockSize;
+        mallocMemory = (memoryNode_t*)malloc(TOTAL_MEM_SIZE);
         mallocLFNode = new LF_node_t<memoryNode_t>[totalMemBlockNum];
 
         allCreateMem.push_back((void*)mallocMemory);
         allCreateMem.push_back((void*)mallocLFNode);
-        
-        memset(mallocMemory, 0x0, TOTAL_MEM_EACH_TYPE);
-        LOG4CPLUS_DEBUG(DAWN_LOG, "init memory pool type "<< i <<" block num "<< totalMemBlockNum);
+
+        memset(mallocMemory, 0x0, TOTAL_MEM_SIZE);
         if(mallocMemory != nullptr && mallocLFNode != nullptr)
         {
+            char *tempMallocMemory = reinterpret_cast<char*>(mallocMemory);
             for(int j = 0; j < totalMemBlockNum; j++)
             {
-                char *tempMallocMemory = reinterpret_cast<char*>(mallocMemory);
-                // ((memoryNode_t*)(&tempMallocMemory[(i - MIN_MEM_BLOCK_TYPE)*j]))->memoryBlockType = i;
-                mallocLFNode[j].elementVal = reinterpret_cast<memoryNode_t*>(&tempMallocMemory[memBlockSize*j]);
-                mallocLFNode[j].elementVal->memoryBlockType = i;
-                mallocLFNode[j].next = &mallocLFNode[j + 1];
+                mallocLFNode[j].elementVal_ = reinterpret_cast<memoryNode_t*>(tempMallocMemory + memBlockSize*j);
+                mallocLFNode[j].elementVal_->memoryBlockType_ = i;
+                mallocLFNode[j].next_ = &mallocLFNode[j + 1];
             }
-            mallocLFNode[totalMemBlockNum - 1].next = nullptr;
+            mallocLFNode[totalMemBlockNum - 1].next_ = nullptr;
             memoryStoreQueue[i - MIN_MEM_BLOCK_TYPE].init(mallocLFNode);
-            LOG4CPLUS_DEBUG(DAWN_LOG, "i alloc "<<i);
         }
+        LOG_DEBUG("init memory pool type "<< i <<" block num "<< totalMemBlockNum);
     }
 }
 
@@ -62,10 +60,10 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
         return nullptr;
     }
     int translateMemSize = requestMemSize;
-    translateMemSize += sizeof(memoryNode_t);  //because struct memoryNode_t will also occupy some memory
+    translateMemSize += sizeof(memoryNode_t);  //Because struct memoryNode_t will also occupy some memory
     if(translateMemSize > MAX_MEM_BLOCK)
     {
-        LOG4CPLUS_WARN(DAWN_LOG, "error: request to alloc is too large "<< translateMemSize);
+        LOG_WARN("error: request to alloc is too large "<< translateMemSize);
         return nullptr;
     }
     int countRequestMemType = 0;
@@ -81,53 +79,57 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
             countRequestMemType += 1;
         }
     }
-    // LOG4CPLUS_WARN(DAWN_LOG, "alloc memtype "<< countRequestMemType);
+
+    LOG_DEBUG("alloc memory type "<< countRequestMemType);
     LF_node_t<memoryNode_t> *memNodeContain = memoryStoreQueue[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNode();
+
     if(memNodeContain == nullptr)
     {
-        LOG4CPLUS_WARN(DAWN_LOG, "alloc fail "<< countRequestMemType <<" "<< translateMemSize);
+        LOG_WARN("alloc fail "<< countRequestMemType <<" "<< translateMemSize);
         return nullptr;
     }
-    memNodeContain->next = nullptr;
-    memoryNode_t *memNode =  memNodeContain->elementVal;
-    memNodeContain->elementVal = nullptr;
+    memNodeContain->next_ = nullptr;
+    memoryNode_t *memNode =  memNodeContain->elementVal_;
+    memNodeContain->elementVal_ = nullptr;
     storeEmptyLFQueue.pushNode(memNodeContain);
     return memNode;
 }
 
-bool memoryPool::freeMemBlock(memoryNode_t *realseMemBlock)
+bool memoryPool::freeMemBlock(memoryNode_t *releaseMemBlock)
 {
-    if(realseMemBlock == nullptr)
+    if(releaseMemBlock == nullptr)
     {
-        LOG4CPLUS_WARN(DAWN_LOG, "error: ask to realse memory block is nullptr ");
+        LOG_ERROR("error: ask to release memory block is nullptr ");
         return PROCESS_FAIL;
     }
-    int memBlockType = realseMemBlock->memoryBlockType;
+    int memBlockType = releaseMemBlock->memoryBlockType_;
     LF_node_t<memoryNode_t>  *availableContain = nullptr;
     availableContain = storeEmptyLFQueue.popNode();
+
     if(availableContain == nullptr)
     {
-        LOG4CPLUS_WARN(DAWN_LOG, "warn: no enough contain to save memory block and be care about some error happen");
+        LOG_WARN("warn: no enough contain to save memory block and be care about some error happen");
         availableContain = new LF_node_t<memoryNode_t>;
     }
-    availableContain->elementVal = realseMemBlock;
+
+    availableContain->elementVal_ = releaseMemBlock;
     memoryStoreQueue[memBlockType - MIN_MEM_BLOCK_TYPE].pushNode(availableContain);
     return PROCESS_SUCCESS;
 }
 
 void memPoolInit()
 {
-    return singleton<net::memoryPool>::getInstance()->init();
+    return singleton<dawn::memoryPool>::getInstance()->init();
 }
 
 memoryNode_t* allocMem(const int requestMemSize)
 {
-    return singleton<net::memoryPool>::getInstance()->allocMemBlock(requestMemSize);
+    return singleton<dawn::memoryPool>::getInstance()->allocMemBlock(requestMemSize);
 }
 
-bool freeMem(memoryNode_t* realseMemBlock)
+bool freeMem(memoryNode_t* releaseMemBlock)
 {
-    return singleton<net::memoryPool>::getInstance()->freeMemBlock(realseMemBlock);
+    return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemBlock);
 }
 
 }
