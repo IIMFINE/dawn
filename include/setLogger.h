@@ -1,39 +1,49 @@
 #ifndef _SET_LOGGER_H_
 #define _SET_LOGGER_H_
+#include <iostream>
+#include <memory>
+#include <fstream>
 
-#ifdef USE_LOG4CPLUS
-#include <log4cplus/log4cplus.h>
-#include <log4cplus/logger.h>
-#include <log4cplus/loggingmacros.h>
-#include <log4cplus/configurator.h>
-#include <log4cplus/fileappender.h>
-#include <log4cplus/initializer.h>
+#ifdef USE_SPDLOG
+#include "spdlog/spdlog.h"
+#include "spdlog/async.h"
+#include "spdlog/fmt/ostr.h"
+#include "spdlog/sinks/basic_file_sink.h"
 
-constexpr const char* LOG_CONFIG_PATH = "/mnt/win_share/myProject/tinyKafka/DAWN_streamMessageSystem/config/thirdParty/log4cplus/log4cplus_config/log4cplus.config";
-
-static log4cplus::Logger DAWN_LOG = log4cplus::Logger::getInstance(LOG4CPLUS_TEXT("DAWN_LOG"));
-
-
-class logManager_t
+namespace dawn
 {
-public:
-    logManager_t()
-    {
-        // log4cplus::Initializer initializer;
-        log4cplus::PropertyConfigurator::doConfigure(LOG4CPLUS_TEXT(LOG_CONFIG_PATH));
-    }
+
+/// @brief avoid multiple definition compile error.
+
+struct logManager_t
+{
+    logManager_t();
+
+    ~logManager_t() = default;
+
+    static std::shared_ptr<spdlog::logger> init_spdlog();
+    static std::shared_ptr<spdlog::logger> return_logger();
+    std::shared_ptr<spdlog::logger> spd_logger_;
 };
 
-static logManager_t logManager;
+};
 
 #ifndef NDEBUG
-#define LOG_DEBUG(...) LOG4CPLUS_DEBUG(DAWN_LOG, __VA_ARGS__);
+#define LOG_DEBUG(...) dawn::logManager_t::return_logger()->debug(__VA_ARGS__);
 #else
-#define LOG_DEBUG(...)
+#define LOG_DEBUG(...) dawn::logManager_t::return_logger()->debug(__VA_ARGS__);
 #endif
-#define LOG_INFO(...) LOG4CPLUS_INFO(DAWN_LOG, __VA_ARGS__);
-#define LOG_WARN(...) LOG4CPLUS_WARN(DAWN_LOG, __VA_ARGS__);
-#define LOG_ERROR(...) LOG4CPLUS_ERROR(DAWN_LOG, __VA_ARGS__);
+#define LOG_INFO(...) dawn::logManager_t::return_logger()->info(__VA_ARGS__);
+#define LOG_WARN(...) dawn::logManager_t::return_logger()->warn(__VA_ARGS__);
+#define LOG_ERROR(...) dawn::logManager_t::return_logger()->error(__VA_ARGS__);
+
+#else
+
+#define LOG_DEBUG(...)
+#define LOG_INFO(...)
+#define LOG_WARN(...)
+#define LOG_ERROR(...)
 
 #endif
+
 #endif

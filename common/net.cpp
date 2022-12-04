@@ -1,7 +1,7 @@
 #include <iostream>
 #include <netinet/in.h>
 #include <arpa/inet.h>
- #include <unistd.h>
+#include <unistd.h>
 #include "net.h"
 #include <errno.h>
 #include <string.h>
@@ -26,7 +26,7 @@ int abstractSocket::translateStringToIpAddr(const std::string& ipString, struct 
 
     if( (portPos = ipString.find(':')) == ipString.npos)
     {
-        std::cout<<"error: cant traslate this ip, string dont containt a port "<< ipString <<std::endl;
+        LOG_ERROR("error: cant translate this ip, string dont contain a port {}", ipString);
         return PROCESS_FAIL;
     }
 
@@ -37,7 +37,7 @@ int abstractSocket::translateStringToIpAddr(const std::string& ipString, struct 
 
     if(inet_pton(AF_INET, ipAddrNoPort.c_str(), &trasnlateIp) == 0)
     {
-        std::cout<<"error: cant trasnlate this ip "<< ipString <<std::endl;
+        LOG_ERROR("cant trasnlate this ip {}", ipString);
         return PROCESS_FAIL;
     }
 
@@ -61,7 +61,7 @@ int udpSocket::initialize(const std::string &ipAddr)
 {
     if(bindSocket(ipAddr) == PROCESS_FAIL)
     {
-        std::cout<<"error: udp initialize fail"<<std::endl;
+        LOG_ERROR("error: udp initialize fail");
         return PROCESS_FAIL;
     }
     return PROCESS_SUCCESS;
@@ -72,7 +72,7 @@ int udpSocket::initialize(const std::string &ipAddr)
 */
 int udpSocket::bindSocket(const std::string &ipAddr)
 {
-    std::cout<< "info: now bind the this ip " << ipAddr <<std::endl;
+    LOG_ERROR("info: now bind the this ip {}", ipAddr);
     sourceIpStr_ = ipAddr;
 
     bindFd_ = socket(PF_INET, SOCK_DGRAM, 0);
@@ -80,7 +80,7 @@ int udpSocket::bindSocket(const std::string &ipAddr)
     if(bindFd_ == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<<"error: cant create udp fd "<<std::endl;
+        LOG_ERROR(" cant create udp fd ");
         return PROCESS_FAIL;
     }
 
@@ -96,7 +96,7 @@ int udpSocket::bindSocket(const std::string &ipAddr)
     if(bind(bindFd_, (struct sockaddr*)&bindIpAddr_in, sizeof(struct sockaddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<< "error: cant bind the this ip " << ipAddr <<std::endl;
+        LOG_ERROR("error: cant bind the this ip {}", ipAddr);
         return PROCESS_FAIL;
     }
     
@@ -115,7 +115,7 @@ int udpSocket::sent2Socket(char *data, uint32_t dataLen, const std::string &send
     if(sendto(bindFd_, data, dataLen, 0, (struct sockaddr*)&sendIpAddr_in, sizeof(sendIpAddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<<"error: cant send data "<<std::endl;
+        LOG_ERROR("cant send data");
     }
     return PROCESS_SUCCESS;
 }
@@ -127,7 +127,7 @@ int udpSocket::recvFromSocket(char *recvData, size_t dataBuffLen)
     if((recvDataLen = recvfrom(bindFd_, recvData, dataBuffLen, 0, (struct sockaddr*)&clientIpAddr_, &ipAddrLen)) == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout <<"error: cant recv data"<<std::endl;
+        LOG_ERROR("cant recv data");
         return INVALID_VALUE;
     }
 
@@ -156,7 +156,7 @@ int tcpSocket::initialize(const std::string &sourceIpAddr)
 {
     if(bindSocket(sourceIpAddr) == PROCESS_FAIL)
     {
-        std::cout<<"error: udp initialize fail"<<std::endl;
+        LOG_ERROR("udp initialize fail");
         return PROCESS_FAIL;
     }
     return PROCESS_SUCCESS;
@@ -167,7 +167,7 @@ int tcpSocket::initialize(const std::string &sourceIpAddr)
 */
 int tcpSocket::bindSocket(const std::string &sourceIpAddr)
 {
-    std::cout<< "info: now bind the this ip " << sourceIpAddr <<std::endl;
+    LOG_INFO("now bind the this ip {}", sourceIpAddr);
     sourceIpStr_ = sourceIpAddr;
 
     bindFd_ = socket(PF_INET, SOCK_STREAM, 0);
@@ -175,7 +175,7 @@ int tcpSocket::bindSocket(const std::string &sourceIpAddr)
     if(bindFd_ == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<<"error: cant create udp fd "<<std::endl;
+        LOG_ERROR("cant create udp fd");
         return PROCESS_FAIL;
     }
 
@@ -191,7 +191,7 @@ int tcpSocket::bindSocket(const std::string &sourceIpAddr)
     if(bind(bindFd_, (struct sockaddr*)&clientIpAddr_in, sizeof(struct sockaddr_in)) == -1)
     {
         LINUX_ERROR_PRINT();
-        std::cout<< "error: cant bind the this ip " << sourceIpAddr <<std::endl;
+        LOG_ERROR("cant bind the this ip {}", sourceIpAddr);
         return PROCESS_FAIL;
     }
     return PROCESS_SUCCESS;
@@ -222,11 +222,11 @@ int tcpAcceptor::accept2Socket()
         if(acceptFd_ < 0)
         {
             LINUX_ERROR_PRINT();
-            std::cout<<"error: TCP cant accept this connect"<<std::endl;
+            LOG_ERROR("TCP cant accept this connect");
             return PROCESS_FAIL;
         }
         clientIpString_ = inet_ntoa(clientIpAddr_.sin_addr);
-        std::cout<<"debug: now accept "<<clientIpString_<<std::endl;
+        LOG_DEBUG("now accept {}", clientIpString_);
         //IO detach, in order to improve the big data transfer performance
         readFd_ = fdopen(acceptFd_, "r");
         writeFd_ = fdopen(acceptFd_, "a");
@@ -250,7 +250,7 @@ int tcpAcceptor::sent2Socket(char *data, uint32_t dataLen, const std::string &se
             else
             {
                 LINUX_ERROR_PRINT();
-                std::cout<<"debug: the tcp socket is disconnect"<<std::endl;
+                LOG_WARN("the tcp socket {} is disconnect", acceptFd_);
                 break;
             }
         }
@@ -288,7 +288,7 @@ int epollMultiIOManager::createMultiIOInstance()
     if((epollFd_ = epoll_create(maxSpyFdNum_)) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
-        std::cout<< "error: cant create epoll fd"<<std::endl;
+        LOG_ERROR("cant create epoll fd");
         return PROCESS_FAIL;
     }
 
@@ -303,7 +303,7 @@ int epollMultiIOManager::initialize(int timeout, int maxFdNum)
     }
     if(createMultiIOInstance() == PROCESS_FAIL)
     {
-        std::cout<< "error: cant initizalie epoll instance" <<std::endl;
+        LOG_ERROR("cant initizalie epoll instance");
         return PROCESS_FAIL;
     }
 
@@ -321,12 +321,12 @@ int epollMultiIOManager::addFd(int addFd, abstractSocket *socket, int eventType)
     if(epoll_ctl(epollFd_, EPOLL_CTL_ADD, addFd, &epollEvent) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
-        std::cout<<"error: cant add fd to epoll watch event "<<std::endl;
+        LOG_ERROR("cant add fd to epoll watch event");
         return PROCESS_FAIL;
     }
     if(insertFdSocketMap(addFd, socket) == INVALID_VALUE)
     {
-        std:: cout << "warn: dont the same socket twice"<<std::endl;
+        LOG_WARN("don't the same socket twice");
     }
 
     return PROCESS_SUCCESS;
@@ -360,7 +360,7 @@ int epollMultiIOManager::removeFdSocketMap(int fd)
         return PROCESS_SUCCESS;
     }
 
-    std::cout<< "warn: fd dont exist"<<std::endl;
+    LOG_WARN("fd {} don't exist", fd);
     return PROCESS_FAIL;
 }
 
@@ -369,7 +369,7 @@ int epollMultiIOManager::removeFd(int deleteFd)
     if(epoll_ctl(epollFd_, EPOLL_CTL_DEL, deleteFd, NULL) == INVALID_VALUE)
     {
         LINUX_ERROR_PRINT();
-        std::cout<<"error: cant remove fd from epoll set"<<std::endl;
+        LOG_ERROR("cant remove fd {} from epoll set", deleteFd);
         return PROCESS_FAIL;
     }
 

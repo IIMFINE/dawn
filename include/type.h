@@ -7,6 +7,9 @@
 #include <functional>
 #include <type_traits>
 
+namespace dawn
+{
+
 #define FALSE   0
 #define TRUE    1
 
@@ -20,7 +23,8 @@ template<typename T>
 class singleton
 {
 public:
-    ~singleton();
+    singleton() = default;
+    ~singleton() = default;
     singleton(singleton&) = delete;
     singleton(const singleton&) = delete;
     singleton& operator=(const singleton&) = delete;
@@ -31,8 +35,6 @@ public:
     }
 };
 
-namespace special_type_traitor
-{
 
 template<typename , typename = void>
 struct is_callable_helper : std::false_type{};

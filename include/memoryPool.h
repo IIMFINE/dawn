@@ -4,7 +4,7 @@
 #include <atomic>
 #include "type.h"
 #include <list>
-
+#include "setLogger.h"
 namespace dawn
 {
 const int MIN_MEM_BLOCK_TYPE = 7;

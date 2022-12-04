@@ -1,0 +1,8 @@
+cmake
+inetutils-ping
+build-essential
+vim
+net-tools
+git
+tmux
+gdb

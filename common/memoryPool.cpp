@@ -3,7 +3,6 @@
 #include "stdlib.h"
 #include "string.h"
 #include "baseOperator.h"
-#include "setLogger.h"
 
 namespace dawn
 {
@@ -40,7 +39,7 @@ void memoryPool::init()
             mallocLFNode[totalMemBlockNum - 1].next_ = nullptr;
             memoryStoreQueue[i - MIN_MEM_BLOCK_TYPE].init(mallocLFNode);
         }
-        LOG_DEBUG("init memory pool type "<< i <<" block num "<< totalMemBlockNum);
+        LOG_INFO("init memory pool type {} block num {}", i, totalMemBlockNum);
     }
 }
 
@@ -63,7 +62,7 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
     translateMemSize += sizeof(memoryNode_t);  //Because struct memoryNode_t will also occupy some memory
     if(translateMemSize > MAX_MEM_BLOCK)
     {
-        LOG_WARN("error: request to alloc is too large "<< translateMemSize);
+        LOG_WARN("error: request to alloc is too large {}", translateMemSize);
         return nullptr;
     }
     int countRequestMemType = 0;
@@ -80,12 +79,12 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
         }
     }
 
-    LOG_DEBUG("alloc memory type "<< countRequestMemType);
+    LOG_DEBUG("alloc memory type {}", countRequestMemType);
     LF_node_t<memoryNode_t> *memNodeContain = memoryStoreQueue[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNode();
 
     if(memNodeContain == nullptr)
     {
-        LOG_WARN("alloc fail "<< countRequestMemType <<" "<< translateMemSize);
+        LOG_WARN("alloc fail {} {}", countRequestMemType, translateMemSize);
         return nullptr;
     }
     memNodeContain->next_ = nullptr;

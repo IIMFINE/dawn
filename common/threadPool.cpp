@@ -2,7 +2,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
  #include <unistd.h>
-#include "net.h"
 #include <errno.h>
 #include <string.h>
 #include <memory.h>
@@ -73,7 +72,7 @@ void threadPool::workThreadRun()
         processedQueueSize = 0;
         TL_processedQueue.clear();
     }
-    LOG4CPLUS_WARN(DAWN_LOG, "the TL_processedQueue size "<< TL_processedQueue.size());
+    LOG_WARN("TL_processedQueue size {}", TL_processedQueue.size());
 }
 
 void threadPoolManager::threadPoolExecute()

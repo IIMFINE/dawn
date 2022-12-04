@@ -51,7 +51,7 @@ struct workQueue_t
             {
                 if(pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
                 {
-                    LOG4CPLUS_ERROR(DAWN_LOG, "push work task to queue wrong");
+                    LOG_ERROR("push work task to queue wrong");
                 }
             }
             else if(runThreadFlag == ENUM_THREAD_STATUS::STOP)
@@ -60,7 +60,7 @@ struct workQueue_t
             }
             else if(runThreadFlag == ENUM_THREAD_STATUS::EXIT)
             {
-                LOG4CPLUS_WARN(DAWN_LOG, "event thread exit");
+                LOG_WARN("event thread exit");
                 break;
             }
         }
@@ -78,7 +78,7 @@ struct workQueue_t
         return pushWorkQueueImpl(std::forward<FUNC_T>(workTask));
     }
 
-    template<typename T ,std::enable_if_t<special_type_traitor::is_callable<T>::value, int> = 0>
+    template<typename T ,std::enable_if_t<dawn::is_callable<T>::value, int> = 0>
     int pushWorkQueueImpl(T&& workTask)
     {
         std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
@@ -88,7 +88,7 @@ struct workQueue_t
         return PROCESS_SUCCESS;
     }
 
-    template<typename T ,std::enable_if_t<!special_type_traitor::is_callable<T>::value, int> = 0>
+    template<typename T ,std::enable_if_t<!dawn::is_callable<T>::value, int> = 0>
     int pushWorkQueueImpl(T&& workTask)
     {
         return PROCESS_SUCCESS;
