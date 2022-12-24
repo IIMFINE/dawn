@@ -109,6 +109,10 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
         LOG_WARN("loop the LF queue to end ");
         return nullptr;
     }
+
+    //Eliminate the hazard
+    singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->removeHazardPointer();
+
     oldNode->next_ = nullptr;
     return oldNode;
 }
