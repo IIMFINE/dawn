@@ -14,13 +14,18 @@ template<typename T>
 struct registerThreadToQueue;
 
 template<typename T>
+struct hazardPointerContainerHeader_t;
+
+template<typename T>
 struct registerThreadToQueue
 {
     hazardPointerContainer<T>* localContainer_;
-    registerThreadToQueue():
-        localContainer_(nullptr)
+    std::shared_ptr<hazardPointerContainerHeader_t<T>> queue_header_;
+    registerThreadToQueue(std::shared_ptr<hazardPointerContainerHeader_t<T>>& header):
+        localContainer_(nullptr),
+        queue_header_(header)
     {
-        auto tempContainerIndex = hazardPointerQueue<T>::getHeader().next_.load(std::memory_order_acquire);
+        auto tempContainerIndex = queue_header_->next_.load(std::memory_order_acquire);
         if(!tempContainerIndex)
         {
             this->insertHazardPointQueue();
@@ -50,13 +55,13 @@ struct registerThreadToQueue
 
     void insertHazardPointQueue()
     {
-        auto tempContainerIndex = hazardPointerQueue<T>::getHeader().next_.load(std::memory_order_acquire );
+        auto tempContainerIndex = queue_header_->next_.load(std::memory_order_acquire );
         auto newContainer = new hazardPointerContainer<T>();
         while (1)
         {
             //When initializing hazard pointer queue, there are only push operations.
             newContainer->next_ = tempContainerIndex;
-            if(hazardPointerQueue<T>::getHeader().next_.compare_exchange_weak(tempContainerIndex, newContainer))
+            if(queue_header_->next_.compare_exchange_weak(tempContainerIndex, newContainer))
             {
                 this->localContainer_ = newContainer;
                 break;
@@ -99,8 +104,7 @@ struct hazardPointerContainer
 
     void resetValue()
     {
-        T tempValue;
-        value_.exchange(tempValue);
+        value_.exchange(T());
     }
 
     ~hazardPointerContainer()
@@ -120,19 +124,26 @@ struct hazardPointerContainerHeader_t
 template<typename T>
 struct hazardPointerQueue
 {
-    hazardPointerQueue() = default;
+    hazardPointerQueue();
     ~hazardPointerQueue();
-    static hazardPointerContainerHeader_t<T>& getHeader();
+    auto& getHeader();
     bool findConflictPointer(T value);
     bool setHazardPointer(T value);
     bool removeHazardPointer();
     hazardPointerContainer<T>* getThreadLocalContainer();
+    std::shared_ptr<hazardPointerContainerHeader_t<T>> p_header_;
 };
+
+template<typename T>
+hazardPointerQueue<T>::hazardPointerQueue():
+p_header_(std::make_shared<hazardPointerContainerHeader_t<T>>())
+{
+}
 
 template<typename T>
 hazardPointerQueue<T>::~hazardPointerQueue()
 {
-    auto headIndex = hazardPointerQueue::getHeader().next_.load(std::memory_order_acquire);
+    auto headIndex = this->getHeader()->next_.load(std::memory_order_acquire);
     if(headIndex != nullptr)
     {
         for(;headIndex != nullptr;)
@@ -145,16 +156,15 @@ hazardPointerQueue<T>::~hazardPointerQueue()
 }
 
 template<typename T>
-hazardPointerContainerHeader_t<T>& hazardPointerQueue<T>::getHeader()
+auto& hazardPointerQueue<T>::getHeader()
 {
-    static hazardPointerContainerHeader_t<T> header;
-    return header;
+    return p_header_;
 }
 
 template<typename T>
 hazardPointerContainer<T>* hazardPointerQueue<T>::getThreadLocalContainer()
 {
-    thread_local registerThreadToQueue<T> registerContainer;
+    thread_local registerThreadToQueue<T> registerContainer(this->getHeader());
     return registerContainer.localContainer_;
 }
 
@@ -173,7 +183,9 @@ bool hazardPointerQueue<T>::setHazardPointer(T value)
 template<typename T>
 bool hazardPointerQueue<T>::findConflictPointer(T value)
 {
-    for(auto containerIndex = hazardPointerQueue::getHeader().next_.load(std::memory_order_acquire); containerIndex != nullptr; containerIndex = containerIndex->next_)
+    for(auto containerIndex = this->getHeader()->next_.load(std::memory_order_acquire);
+            containerIndex != nullptr;
+            containerIndex = containerIndex->next_)
     {
         if(containerIndex->thread_id_ != std::this_thread::get_id() && containerIndex->value_.load(std::memory_order_acquire) == value)
         {
