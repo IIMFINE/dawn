@@ -9,13 +9,12 @@ namespace dawn
 
 memoryPool::memoryPool()
 {
-    storeEmptyLFQueue.init(nullptr);
+    storeEmptyLFQueue_.init(nullptr);
 }
 void memoryPool::init()
 {
     memoryNode_t *mallocMemory = nullptr;
     LF_node_t<memoryNode_t>  *mallocLFNode = nullptr;
-    std::atomic<LF_node_t<memoryNode_t>*>         LF_queueHead;
     for(int i = MIN_MEM_BLOCK_TYPE; i <= MAX_MEM_BLOCK_TYPE; ++i)
     {
         int memBlockSize = 1 << i;
@@ -23,8 +22,8 @@ void memoryPool::init()
         mallocMemory = (memoryNode_t*)malloc(TOTAL_MEM_SIZE);
         mallocLFNode = new LF_node_t<memoryNode_t>[totalMemBlockNum];
 
-        allCreateMem.push_back((void*)mallocMemory);
-        allCreateMem.push_back((void*)mallocLFNode);
+        allCreateMem_.push_back((void*)mallocMemory);
+        allCreateMem_.push_back((void*)mallocLFNode);
 
         memset(mallocMemory, 0x0, TOTAL_MEM_SIZE);
         if(mallocMemory != nullptr && mallocLFNode != nullptr)
@@ -37,7 +36,7 @@ void memoryPool::init()
                 mallocLFNode[j].next_ = &mallocLFNode[j + 1];
             }
             mallocLFNode[totalMemBlockNum - 1].next_ = nullptr;
-            memoryStoreQueue[i - MIN_MEM_BLOCK_TYPE].init(mallocLFNode);
+            memoryStoreQueue_[i - MIN_MEM_BLOCK_TYPE].init(mallocLFNode);
         }
         LOG_INFO("init memory pool type {} block num {}", i, totalMemBlockNum);
     }
@@ -45,11 +44,11 @@ void memoryPool::init()
 
 memoryPool::~memoryPool()
 {
-    for(auto freeMem : allCreateMem)
+    for(auto freeMem : allCreateMem_)
     {
         free(freeMem);
     }
-    allCreateMem.clear();
+    allCreateMem_.clear();
 }
 
 memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
@@ -80,7 +79,7 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
     }
 
     LOG_DEBUG("alloc memory type {}", countRequestMemType);
-    LF_node_t<memoryNode_t> *memNodeContain = memoryStoreQueue[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNode();
+    LF_node_t<memoryNode_t> *memNodeContain = memoryStoreQueue_[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNode();
 
     if(memNodeContain == nullptr)
     {
@@ -90,7 +89,7 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
     memNodeContain->next_ = nullptr;
     memoryNode_t *memNode =  memNodeContain->elementVal_;
     memNodeContain->elementVal_ = nullptr;
-    storeEmptyLFQueue.pushNode(memNodeContain);
+    storeEmptyLFQueue_.pushNode(memNodeContain);
     return memNode;
 }
 
@@ -103,7 +102,7 @@ bool memoryPool::freeMemBlock(memoryNode_t *releaseMemBlock)
     }
     int memBlockType = releaseMemBlock->memoryBlockType_;
     LF_node_t<memoryNode_t>  *availableContain = nullptr;
-    availableContain = storeEmptyLFQueue.popNode();
+    availableContain = storeEmptyLFQueue_.popNode();
 
     if(availableContain == nullptr)
     {
@@ -112,7 +111,7 @@ bool memoryPool::freeMemBlock(memoryNode_t *releaseMemBlock)
     }
 
     availableContain->elementVal_ = releaseMemBlock;
-    memoryStoreQueue[memBlockType - MIN_MEM_BLOCK_TYPE].pushNode(availableContain);
+    memoryStoreQueue_[memBlockType - MIN_MEM_BLOCK_TYPE].pushNode(availableContain);
     return PROCESS_SUCCESS;
 }
 

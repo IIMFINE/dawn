@@ -33,9 +33,9 @@ public:
     memoryNode_t* allocMemBlock(const int requestMemSize);
     bool freeMemBlock(memoryNode_t* releaseMemBlock);
 private:
-    lockFreeStack<memoryNode_t>    memoryStoreQueue[MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1];
-    lockFreeStack<memoryNode_t>    storeEmptyLFQueue;
-    std::list<void*>               allCreateMem;
+    lockFreeStack<memoryNode_t>    memoryStoreQueue_[MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1];
+    lockFreeStack<memoryNode_t>    storeEmptyLFQueue_;
+    std::list<void*>               allCreateMem_;
 };
 
 memoryNode_t* allocMem(const int requestMemSize);

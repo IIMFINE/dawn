@@ -25,7 +25,7 @@ struct  LF_node_t
 template<typename T>
 class lockFreeStack
 {
-std::atomic<LF_node_t<T>*>         LF_queueHead;
+    std::atomic<LF_node_t<T>*>         LF_queueHead_;
 
 public:
     lockFreeStack();
@@ -38,14 +38,14 @@ public:
 
 template<typename T>
 lockFreeStack<T>::lockFreeStack():
-LF_queueHead(static_cast<LF_node_t<T>*>(nullptr))
+LF_queueHead_(static_cast<LF_node_t<T>*>(nullptr))
 {
 }
 
 template<typename T>
 void lockFreeStack<T>::init(LF_node_t<T>* queueHead)
 {
-    LF_queueHead.store(queueHead);
+    LF_queueHead_.store(queueHead);
 }
 
 template<typename T>
@@ -53,11 +53,11 @@ void lockFreeStack<T>::pushNode(LF_node_t<T> *node)
 {
     if(node != nullptr)
     {
-        auto oldHead =  LF_queueHead.load(std::memory_order_acquire);
+        auto oldHead =  LF_queueHead_.load(std::memory_order_acquire);
         do
         {
             node->next_ = oldHead;
-        } while (!LF_queueHead.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
+        } while (!LF_queueHead_.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
     }
     else
     {
@@ -73,7 +73,7 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
     LF_node_t<T> *headNode = nullptr;
 
     //Use hazard pointer to avoid the ABA problem
-    oldNode = LF_queueHead.load(std::memory_order_acquire);
+    oldNode = LF_queueHead_.load(std::memory_order_acquire);
     do
     {
         if(oldNode == nullptr)
@@ -86,9 +86,9 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
             do{
                 headNode = oldNode;
                 singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->setHazardPointer(headNode);
-                oldNode = LF_queueHead.load(std::memory_order_acquire);
+                oldNode = LF_queueHead_.load(std::memory_order_acquire);
             } while (oldNode != headNode);
-            if(oldNode != nullptr && LF_queueHead.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
+            if(oldNode != nullptr && LF_queueHead_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
             {
                 // Waiting hazard gone.
                 while(1)
