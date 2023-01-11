@@ -30,6 +30,9 @@ public:
     funcWrapper(funcWrapper&) = delete;
     funcWrapper& operator=(const funcWrapper&) = delete;
 
+    funcWrapper() = default;
+    ~funcWrapper() = default;
+
     template<typename FUNC_T>
     funcWrapper(FUNC_T givenFunc):
         p_wrappedFunc(std::move(std::make_unique<funcWrapperDriveImpl<FUNC_T>>(std::move(givenFunc))))
@@ -41,6 +44,13 @@ public:
         p_wrappedFunc(std::move(givenFuncWrapper.p_wrappedFunc))
     {
     }
+
+    funcWrapper& operator=(funcWrapper&& ins)
+    {
+      p_wrappedFunc = std::move(ins.p_wrappedFunc);
+      return *this;
+    }
+
     auto execFunc()
     {
         p_wrappedFunc->call();

@@ -16,7 +16,14 @@ struct  LF_node_t
     next_(nullptr)
     {
     }
-    T* elementVal_;
+
+    LF_node_t(T&& val):
+    elementVal_(std::forward<T>(val)),
+    next_(nullptr)
+    {
+    }
+
+    T elementVal_;
     LF_node_t *next_;
 
 };
@@ -26,12 +33,12 @@ template<typename T>
 class lockFreeStack
 {
     std::atomic<LF_node_t<T>*>         LF_queueHead_;
-
+    hazardPointerQueue<LF_node_t<T>*>  hazardPointerQueue_;
 public:
     lockFreeStack();
     ~lockFreeStack()=default;
     void init(LF_node_t<T>* queueHead);
-    LF_node_t<T>* popNode();
+    LF_node_t<T>* popNodeWithHazard();
     void pushNode(LF_node_t<T> *node);
 };
 
@@ -61,13 +68,13 @@ void lockFreeStack<T>::pushNode(LF_node_t<T> *node)
     }
     else
     {
-        LOG_WARN( "a null node is pushed to queue");
+        LOG_WARN( "a null node can be pushed to queue");
     }
     return;
 }
 
 template<typename T>
-LF_node_t<T>* lockFreeStack<T>::popNode()
+LF_node_t<T>* lockFreeStack<T>::popNodeWithHazard()
 {
     LF_node_t<T> *oldNode = nullptr;
     LF_node_t<T> *headNode = nullptr;
@@ -85,7 +92,7 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
         {
             do{
                 headNode = oldNode;
-                singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->setHazardPointer(headNode);
+                hazardPointerQueue_.setHazardPointer(headNode);
                 oldNode = LF_queueHead_.load(std::memory_order_acquire);
             } while (oldNode != headNode);
             if(oldNode != nullptr && LF_queueHead_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
@@ -93,7 +100,7 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
                 // Waiting hazard gone.
                 while(1)
                 {
-                    if(singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->findConflictPointer(oldNode) == true)
+                    if(hazardPointerQueue_.findConflictPointer(oldNode) == true)
                     {
                         break;
                     }
@@ -111,8 +118,7 @@ LF_node_t<T>* lockFreeStack<T>::popNode()
     }
 
     //Eliminate the hazard
-    singleton<hazardPointerQueue<LF_node_t<T>*>>::getInstance()->removeHazardPointer();
-
+    hazardPointerQueue_.removeHazardPointer();
     oldNode->next_ = nullptr;
     return oldNode;
 }

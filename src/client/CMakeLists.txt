@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.10)
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
 add_compile_options(-Wall -g -std=c++17)
 set(OUTPUT_EXEC_FILE client_app)
 #set head file directory

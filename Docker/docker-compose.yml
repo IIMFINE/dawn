@@ -2,10 +2,9 @@ version: "3.8"
 services:
     dawn_app:
       container_name: "dawn_app"
-      image: dawn_dev
+      image: simplepan/dawn_dev
       tty: true
       network_mode: "host"
       volumes:
       #map host folder to container
-        - /E/share/docker_dir/dawn_dev:/home/DAWN/workspace:rw
-        - /E/share/:/home/DAWN/host_share:rw
+        - /home/bot/Documents/dorabot/code/my_project:/home/DAWN/host_share:rw

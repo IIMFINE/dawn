@@ -14,13 +14,13 @@ memoryPool::memoryPool()
 void memoryPool::init()
 {
     memoryNode_t *mallocMemory = nullptr;
-    LF_node_t<memoryNode_t>  *mallocLFNode = nullptr;
+    LF_node_t<memoryNode_t*>  *mallocLFNode = nullptr;
     for(int i = MIN_MEM_BLOCK_TYPE; i <= MAX_MEM_BLOCK_TYPE; ++i)
     {
         int memBlockSize = 1 << i;
         int totalMemBlockNum = TOTAL_MEM_SIZE / memBlockSize;
         mallocMemory = (memoryNode_t*)malloc(TOTAL_MEM_SIZE);
-        mallocLFNode = new LF_node_t<memoryNode_t>[totalMemBlockNum];
+        mallocLFNode = new LF_node_t<memoryNode_t*>[totalMemBlockNum];
 
         allCreateMem_.push_back((void*)mallocMemory);
         allCreateMem_.push_back((void*)mallocLFNode);
@@ -79,7 +79,7 @@ memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
     }
 
     LOG_DEBUG("alloc memory type {}", countRequestMemType);
-    LF_node_t<memoryNode_t> *memNodeContain = memoryStoreQueue_[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNode();
+    LF_node_t<memoryNode_t*> *memNodeContain = memoryStoreQueue_[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNodeWithHazard();
 
     if(memNodeContain == nullptr)
     {
@@ -101,13 +101,13 @@ bool memoryPool::freeMemBlock(memoryNode_t *releaseMemBlock)
         return PROCESS_FAIL;
     }
     int memBlockType = releaseMemBlock->memoryBlockType_;
-    LF_node_t<memoryNode_t>  *availableContain = nullptr;
-    availableContain = storeEmptyLFQueue_.popNode();
+    LF_node_t<memoryNode_t*>  *availableContain = nullptr;
+    availableContain = storeEmptyLFQueue_.popNodeWithHazard();
 
     if(availableContain == nullptr)
     {
         LOG_WARN("warn: no enough contain to save memory block and be care about some error happen");
-        availableContain = new LF_node_t<memoryNode_t>;
+        availableContain = new LF_node_t<memoryNode_t*>;
     }
 
     availableContain->elementVal_ = releaseMemBlock;

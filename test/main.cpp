@@ -36,9 +36,9 @@ struct test_mem
 
 int main()
 {
-    LOG_INFO("Hello world");
-#if 1
-    int test_time = 60;
+    LOG_DEBUG("Hello world");
+#if 0
+    int test_time = 10;
     dawn::memPoolInit();
     auto testThread1 = [&](){
         auto time_left = std::chrono::nanoseconds(std::chrono::seconds(test_time));
@@ -160,6 +160,28 @@ int main()
         std::thread(b).detach();
     }
     sleep(5);
+#endif
+
+#if 0
+    using namespace dawn;
+    auto manager_ins = singleton<threadPoolManager>::getInstance();
+    int a = 0;
+    auto f1 = [&a](){
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        a++;
+        LOG_INFO("a {}", a);
+        auto f2 = [&a](){
+            if(a <= 10)
+            {
+                LOG_INFO("hello world a {}", a);
+            }
+        };
+        return f2;
+    };
+    manager_ins->createThreadPool(2, f1);
+    manager_ins->threadPoolExecute();
+    std::this_thread::sleep_for(std::chrono::seconds(11));
+    manager_ins->threadPoolDestory();
 #endif
 
 }

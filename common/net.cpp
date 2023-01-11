@@ -399,6 +399,7 @@ inline int epollMultiIOManager::handleEpollEvent(struct epoll_event& event)
     {
         // acceptFd = accept(uniq_listenSocket_->getBindFd(),);
     }
+    return 0;
 }
 
 };

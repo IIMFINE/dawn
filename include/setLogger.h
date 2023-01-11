@@ -21,7 +21,7 @@ struct logManager_t
 
     ~logManager_t() = default;
 
-    static std::shared_ptr<spdlog::logger> init_spdlog();
+    void init_spdlog();
     static std::shared_ptr<spdlog::logger> return_logger();
     std::shared_ptr<spdlog::logger> spd_logger_;
 };
@@ -31,7 +31,7 @@ struct logManager_t
 #ifndef NDEBUG
 #define LOG_DEBUG(...) dawn::logManager_t::return_logger()->debug(__VA_ARGS__);
 #else
-#define LOG_DEBUG(...) dawn::logManager_t::return_logger()->debug(__VA_ARGS__);
+#define LOG_DEBUG(...)
 #endif
 #define LOG_INFO(...) dawn::logManager_t::return_logger()->info(__VA_ARGS__);
 #define LOG_WARN(...) dawn::logManager_t::return_logger()->warn(__VA_ARGS__);

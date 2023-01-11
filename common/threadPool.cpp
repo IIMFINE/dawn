@@ -1,34 +1,27 @@
-#include <iostream>
-#include <netinet/in.h>
-#include <arpa/inet.h>
- #include <unistd.h>
-#include <errno.h>
-#include <string.h>
-#include <memory.h>
-#include <condition_variable>
 #include "threadPool.h"
-#include "setLogger.h"
+
 namespace dawn
 {
 
 
-threadPool::threadPool()
+threadPool::threadPool():
+should_wakeup_(false)
 {
-    storeWorkQueue.workQueue.clear();
 }
 
 void threadPool::init(uint32_t workThreadNum)
 {
     for(uint32_t i = 0; i < workThreadNum; i++)
     {
-        threadList.push_back(new std::thread(std::bind(&threadPool::workThreadRun, this)));
+        threadList_.push_back(new std::thread(std::bind(&threadPool::workThreadRun, this)));
     }
 }
 
 void threadPool::quitAllThreads()
 {
-    runThreadFlag = ENUM_THREAD_STATUS::EXIT;
-    for(auto threadItor : threadList)
+    runThreadFlag_ = ENUM_THREAD_STATUS::EXIT;
+    threadCond_.notify_all();
+    for(auto& threadItor : threadList_)
     {
         if(threadItor->joinable())
         {
@@ -36,43 +29,68 @@ void threadPool::quitAllThreads()
             delete threadItor;
         }
     }
-    threadList.clear();
+    threadList_.clear();
 }
 
 void threadPool::runAllThreads()
 {
-    runThreadFlag = ENUM_THREAD_STATUS::RUN;
+    runThreadFlag_ = ENUM_THREAD_STATUS::RUN;
 }
 
 void threadPool::haltAllThreads()
 {
-    runThreadFlag = ENUM_THREAD_STATUS::STOP;
+    runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
 }
 
-void threadPool::popWorkQueue(std::vector<funcWrapper> &TL_processedQueue)
+bool threadPool::popWorkQueue(funcWrapper& taskNode)
 {
-    TL_processedQueue.swap(storeWorkQueue.workQueue);
+    auto LF_stackNode = taskStack_.popNodeWithHazard();
+    if(LF_stackNode != nullptr)
+    {
+        taskNode = std::move(LF_stackNode->elementVal_);
+        --taskNumber_;
+        ///@todo optimize to smart pointer
+        delete LF_stackNode;
+        return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
 }
 
 void threadPool::workThreadRun()
 {
-    std::vector<funcWrapper>   TL_processedQueue;
-    size_t  processedQueueSize = 0;
-    for(;runThreadFlag != ENUM_THREAD_STATUS::EXIT;)
+    for(;runThreadFlag_ != ENUM_THREAD_STATUS::EXIT;)
     {
-        std::unique_lock<std::mutex> readQueueLock(storeWorkQueue.queueMutex);
-        threadCond.wait(readQueueLock, [this]{return !storeWorkQueue.workQueue.empty();});  //avoid false wake
-        popWorkQueue(TL_processedQueue);
-        readQueueLock.unlock();
-        processedQueueSize = TL_processedQueue.size();
-        for(size_t i = 0; i < processedQueueSize; i++)
+        std::unique_lock<std::mutex> stackLock(queueMutex_);
+        //avoid spurious wakeup
+        threadCond_.wait(stackLock, [this](){
+                if((taskNumber_ > 0 && should_wakeup_.load() == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+                {
+                    return true;
+                }
+                return false;
+            });
+        if(taskNumber_ == 1)
         {
-            TL_processedQueue[i]();
+            should_wakeup_ = false;
         }
-        processedQueueSize = 0;
-        TL_processedQueue.clear();
+        stackLock.unlock();
+
+        funcWrapper taskNode;
+        if(runThreadFlag_ != ENUM_THREAD_STATUS::EXIT)
+        {
+            for(; taskNumber_ != 0;)
+            {
+                if(popWorkQueue(taskNode) == PROCESS_SUCCESS)
+                {
+                    taskNode();
+                }
+            }
+        }
+        else
+        {
+            return;
+        }
     }
-    LOG_WARN("TL_processedQueue size {}", TL_processedQueue.size());
 }
 
 void threadPoolManager::threadPoolExecute()

@@ -1,13 +1,7 @@
 #ifndef _THREAD_FUNC_H_
 #define _THREAD_FUNC_H_
 
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
 #include "type.h"
-#include <map>
-#include <sys/epoll.h>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -15,6 +9,7 @@
 #include <list>
 #include "setLogger.h"
 #include "funcWrapper.h"
+#include "lockFree.h"
 
 namespace dawn
 {
@@ -47,18 +42,22 @@ struct workQueue_t
     {
         while(1)
         {
-            if(runThreadFlag == ENUM_THREAD_STATUS::RUN)
+            if(runThreadFlag_ == ENUM_THREAD_STATUS::RUN)
             {
                 if(pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
                 {
                     LOG_ERROR("push work task to queue wrong");
                 }
+                else
+                {
+                    threadCond_.notify_one();
+                }
             }
-            else if(runThreadFlag == ENUM_THREAD_STATUS::STOP)
+            else if(runThreadFlag_ == ENUM_THREAD_STATUS::STOP)
             {
                 std::this_thread::yield();
             }
-            else if(runThreadFlag == ENUM_THREAD_STATUS::EXIT)
+            else if(runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
             {
                 LOG_WARN("event thread exit");
                 break;
@@ -69,7 +68,7 @@ struct workQueue_t
     template<typename FUNC_T>
     void setEventThread(FUNC_T returnCb)
     {
-        threadList.push_back(new std::thread(&threadPool::eventDriverThread<FUNC_T>, this, returnCb));
+        threadList_.push_back(new std::thread(&threadPool::eventDriverThread<FUNC_T>, this, returnCb));
     }
 
     template<typename FUNC_T>
@@ -81,10 +80,10 @@ struct workQueue_t
     template<typename T ,std::enable_if_t<dawn::is_callable<T>::value, int> = 0>
     int pushWorkQueueImpl(T&& workTask)
     {
-        std::unique_lock<std::mutex> writeQueueLock(storeWorkQueue.queueMutex);
-        storeWorkQueue.workQueue.emplace_back(workTask);
-        writeQueueLock.unlock();
-        threadCond.notify_one();
+        auto p_LF_node = new LF_node_t<funcWrapper>(std::forward<T>(workTask));
+        taskStack_.pushNode(p_LF_node);
+        should_wakeup_ = true;
+        ++taskNumber_;
         return PROCESS_SUCCESS;
     }
 
@@ -98,13 +97,17 @@ struct workQueue_t
     void haltAllThreads();
     void runAllThreads();
 private:
-    void popWorkQueue(std::vector<funcWrapper> &TL_processedQueue);
+    bool popWorkQueue(funcWrapper& taskNode);
     void workThreadRun();
 private:
-    volatile ENUM_THREAD_STATUS                 runThreadFlag = ENUM_THREAD_STATUS::STOP;
-    workQueue_t                                 storeWorkQueue;
-    std::condition_variable                     threadCond;
-    std::vector<std::thread*>                   threadList;
+    volatile ENUM_THREAD_STATUS                 runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
+    std::mutex                                  queueMutex_;
+    //a proximity number to identify the amount of tasks.
+    volatile int                                taskNumber_;
+    std::atomic_bool                            should_wakeup_;
+    lockFreeStack<funcWrapper>                  taskStack_;
+    std::condition_variable                     threadCond_;
+    std::vector<std::thread*>                   threadList_;
 };
 
 class threadPoolManager
