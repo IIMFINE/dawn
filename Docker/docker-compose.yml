@@ -1,10 +1,14 @@
 version: "3.8"
 services:
-    dawn_app:
-      container_name: "dawn_app"
-      image: simplepan/dawn_dev
-      tty: true
-      network_mode: "host"
-      volumes:
+  dawn_app:
+    container_name: "dawn_app"
+    image: simplepan/dawn_dev
+    tty: true
+    #privileged must be true
+    privileged: true
+    # network_mode: "host"
+    # userns_mode: host
+    volumes:
       #map host folder to container
-        - /home/bot/Documents/dorabot/code/my_project:/home/DAWN/host_share:rw
+      - /home/bot/Documents/dorabot/code/my_project:/home/DAWN/host_share:rw
+      # - /f/project/git_project/my_project/DAWN_streamMessageSystem:/home/DAWN/workspace:rw

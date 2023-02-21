@@ -2,7 +2,8 @@ cmake
 inetutils-ping
 build-essential
 vim
-net-tools
 git
 tmux
 gdb
+iproute2
+libboost-all-dev
