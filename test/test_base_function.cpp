@@ -29,14 +29,9 @@
 #include "setLogger.h"
 #include <chrono>
 
-struct test_mem
-{
-    test_mem* next;
-};
-
 int main()
 {
-    LOG_DEBUG("Hello world");
+  LOG_DEBUG("Hello world");
 #if 0
     int test_time = 10;
     dawn::memPoolInit();
@@ -48,7 +43,7 @@ int main()
         {
             for(int i = 1; i < 1000; i++)
             {
-                tempNode = dawn::allocMem(i);
+                tempNode = dawn::lowLevelAllocMem(i);
                 if(tempNode == nullptr)
                 {
                     LOG_INFO("cant alloc mem size is {}", i );
@@ -58,7 +53,7 @@ int main()
                 {
                     LOG_DEBUG("alloc successfully mem size is {}", i );
                 }
-                if(dawn::freeMem(tempNode) == false)
+                if (dawn::lowLevelFreeMem(tempNode) == false)
                 {
                     LOG_INFO("cant free mem ");
                 }
@@ -137,7 +132,7 @@ int main()
         /* code */
         std::this_thread::yield();
     }
-    
+
 #endif
 
 #if 0
@@ -183,5 +178,4 @@ int main()
     std::this_thread::sleep_for(std::chrono::seconds(11));
     manager_ins->threadPoolDestory();
 #endif
-
 }
