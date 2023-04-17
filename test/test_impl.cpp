@@ -210,22 +210,41 @@ TEST(test_dawn, test_shm_pool)
 TEST(test_dawn, test_shmTp_read)
 {
   using namespace dawn;
+  using TP = abstractTransport;
   shmTransport shm_tp("hello_world_dawn");
   for (;;)
   {
     char data[1000];
     uint32_t len = 0;
-    if (shm_tp.read(data, len) == PROCESS_FAIL)
+    if (shm_tp.read(data, len, TP::BLOCK_TYPE::NON_BLOCK) == PROCESS_FAIL)
     {
       std::cout << "failed" << std::endl;
     }
-    LOG_INFO("end");
-    LOG_INFO("receive data {}", data);
+    else
+    {
+      LOG_INFO("end");
+      LOG_INFO("receive data {}", data);
+    }
     std::memset(data, 0x0, 1000);
   }
 }
 
-TEST(test_dawn, test_shmTp_write_small_data)
+TEST(test_dawn, test_shmTp_write_data)
+{
+  using namespace dawn;
+  shmTransport shm_tp("hello_world_dawn");
+  auto i = 0;
+  {
+    std::string data = "helloWorld";
+    data += std::to_string(i);
+    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+  }
+}
+
+TEST(test_dawn, test_shmTp_write_small_data_loop)
 {
   using namespace dawn;
   shmTransport shm_tp("hello_world_dawn");
@@ -238,6 +257,7 @@ TEST(test_dawn, test_shmTp_write_small_data)
     {
       std::cout << "failed" << std::endl;
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 }
 
@@ -248,23 +268,19 @@ TEST(test_dawn, test_shmChannel_notify)
   a.notifyAll();
 }
 
-TEST(test_dawn, test_shmChannel_wait1)
+TEST(test_dawn, test_shmChannel_wait)
 {
   using namespace dawn;
   shmChannel a("dawn_test_channel");
   a.waitNotify();
 }
 
-TEST(test_dawn, test_shmChannel_wait2)
+TEST(test_dawn, test_shmChannel_try_wait)
 {
   using namespace dawn;
   shmChannel a("dawn_test_channel");
-  a.waitNotify();
-}
-
-TEST(test_dawn, test_shmChannel_wait3)
-{
-  using namespace dawn;
-  shmChannel a("dawn_test_channel");
-  a.waitNotify();
+  if (a.tryWaitNotify() == false)
+  {
+    std::cout << "failed" << std::endl;
+  }
 }

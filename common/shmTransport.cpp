@@ -1,7 +1,10 @@
-#include "shmTransport.h"
 #include <cassert>
-#include "setLogger.h"
 #include <ctime>
+#include <chrono>
+#include <boost/date_time/posix_time/posix_time.hpp>
+
+#include "shmTransport.h"
+#include "setLogger.h"
 
 namespace  dawn
 {
@@ -13,17 +16,7 @@ namespace  dawn
     {
       throw std::runtime_error("shm channel identity is empty");
     }
-    condition_ptr_ = std::make_shared<named_condition>\
-      (open_or_create, identity_.c_str());
-    mutex_ptr_ = std::make_shared<named_mutex>\
-      (open_or_create, identity_.c_str());
-  }
-
-  shmChannel::~shmChannel()
-  {
-    using namespace BI;
-    named_condition::remove(identity_.c_str());
-    named_mutex::remove(identity_.c_str());
+    ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(identity_);
   }
 
   void shmChannel::initialize(std::string_view identity)
@@ -34,78 +27,73 @@ namespace  dawn
     {
       throw std::runtime_error("shm channel identity is empty");
     }
-    condition_ptr_ = std::make_shared<named_condition>\
-      (open_or_create, identity_.c_str());
-    mutex_ptr_ = std::make_shared<named_mutex>\
-      (open_or_create, identity_.c_str());
+    ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(identity_);
   }
 
   void shmChannel::notifyAll()
   {
-    condition_ptr_->notify_all();
+    ipc_ptr_->mechanism_raw_ptr_->condition_.notify_all();
   }
 
   void shmChannel::waitNotify()
   {
     using namespace BI;
-    scoped_lock<named_mutex> lock(*(mutex_ptr_.get()));
-    condition_ptr_->wait(lock);
+    scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
+    ipc_ptr_->mechanism_raw_ptr_->condition_.wait(lock);
+  }
+
+  bool shmChannel::tryWaitNotify(uint32_t microsecond)
+  {
+    using namespace BI;
+    scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
+    return ipc_ptr_->mechanism_raw_ptr_->condition_.timed_wait(lock, \
+      boost::posix_time::microsec_clock::universal_time() + boost::posix_time::microseconds(microsecond));
   }
 
   shmIndexRingBuffer::shmIndexRingBuffer(std::string_view identity):
     shmIdentity_(identity),
-    startIndexIdentity_(RING_BUFFER_START_PREFIX + shmIdentity_),
-    endIndexIdentity_(RING_BUFFER_END_PREFIX + shmIdentity_)
+    mechanismIdentity_(MECHANISM_PREFIX + shmIdentity_)
   {
     using namespace BI;
-    startIndex_mutex_ptr_ = std::make_shared<named_mutex>(open_or_create, startIndexIdentity_.c_str());
-    endIndex_mutex_ptr_ = std::make_shared<named_mutex>(open_or_create, endIndexIdentity_.c_str());
+    ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(mechanismIdentity_);
     ringBufferShm_ptr_ = std::make_shared<shared_memory_object>(open_or_create, shmIdentity_.c_str(), read_write);
     ringBufferShm_ptr_->truncate(SHM_RING_BUFFER_SIZE);
     ringBufferShmRegion_ptr_ = std::make_shared<mapped_region>(*(ringBufferShm_ptr_.get()), read_write);
     ringBuffer_raw_ptr_ = reinterpret_cast<ringBufferType*>(ringBufferShmRegion_ptr_->get_address());
-    ringBufferInitialFlag_ptr_ = std::make_shared<named_semaphore>(open_or_create, shmIdentity_.c_str(), 1);
+
     ///@note ensure ringBuffer_raw_ptr_ just initialize only one time.
-    if (ringBufferInitialFlag_ptr_->try_wait())
+    if (ipc_ptr_->mechanism_raw_ptr_->ringBufferInitializedFlag_.try_wait())
     {
       ringBuffer_raw_ptr_->startIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->endIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->totalIndex_ = SHM_BLOCK_NUM;
     }
-  }
-
-  shmIndexRingBuffer::~shmIndexRingBuffer()
-  {
-    using namespace BI;
-    named_mutex::remove(startIndexIdentity_.c_str());
-    named_mutex::remove(endIndexIdentity_.c_str());
-    shared_memory_object::remove(shmIdentity_.c_str());
-    named_semaphore::remove(shmIdentity_.c_str());
   }
 
   void shmIndexRingBuffer::initialize(std::string_view identity)
   {
     using namespace BI;
     shmIdentity_ = identity;
-    startIndexIdentity_ = RING_BUFFER_START_PREFIX + shmIdentity_;
-    endIndexIdentity_ = RING_BUFFER_END_PREFIX + shmIdentity_;
+    mechanismIdentity_ = MECHANISM_PREFIX + shmIdentity_;
+    ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(mechanismIdentity_);
     ringBufferShm_ptr_ = std::make_shared<shared_memory_object>(open_or_create, shmIdentity_.c_str(), read_write);
     ringBufferShm_ptr_->truncate(SHM_RING_BUFFER_SIZE);
     ringBufferShmRegion_ptr_ = std::make_shared<mapped_region>(*(ringBufferShm_ptr_.get()), read_write);
     ringBuffer_raw_ptr_ = reinterpret_cast<ringBufferType*>(ringBufferShmRegion_ptr_->get_address());
-    ringBufferInitialFlag_ptr_ = std::make_shared<named_semaphore>(open_or_create, shmIdentity_.c_str(), 1);
+
     ///@note ensure ringBuffer_raw_ptr_ just initialize only one time.
-    if (ringBufferInitialFlag_ptr_->try_wait())
+    if (ipc_ptr_->mechanism_raw_ptr_->ringBufferInitializedFlag_.try_wait())
     {
       ringBuffer_raw_ptr_->startIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->endIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->totalIndex_ = SHM_BLOCK_NUM;
     }
+
   }
 
   bool shmIndexRingBuffer::moveStartIndex(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::named_mutex>    startIndexLock(*(startIndex_mutex_ptr_.get()));
+    BI::scoped_lock<BI::interprocess_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
     {
@@ -135,39 +123,42 @@ namespace  dawn
     return PROCESS_FAIL;
   }
 
-  bool shmIndexRingBuffer::moveEndIndex(ringBufferIndexBlockType &indexBlock, uint32_t &storePosition)
+  shmIndexRingBuffer::PROCESS_RESULT shmIndexRingBuffer::moveEndIndex(ringBufferIndexBlockType &indexBlock, uint32_t &storePosition)
   {
-    BI::scoped_lock<BI::named_mutex>    endIndexLock(*(endIndex_mutex_ptr_.get()));
+    BI::scoped_lock<BI::interprocess_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
+      // This scenario is ring buffer is initial.
       //Lock start index
-      BI::scoped_lock<BI::named_mutex>    startIndexLock(*(startIndex_mutex_ptr_.get()));
+      BI::scoped_lock<BI::interprocess_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
       ringBuffer_raw_ptr_->endIndex_ = 0;
       ringBuffer_raw_ptr_->startIndex_ = 0;
       std::memcpy(&ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->endIndex_], &indexBlock, sizeof(ringBufferIndexBlockType));
       ringBuffer_raw_ptr_->endIndex_ = calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1);
-      return PROCESS_SUCCESS;
+      return PROCESS_RESULT::SUCCESS;
     }
     else if (ringBuffer_raw_ptr_->startIndex_ == ringBuffer_raw_ptr_->endIndex_)
     {
-      LOG_WARN("Ring buffer start index {} will overlap end index {}, ring buffer have not content", \
-        (ringBuffer_raw_ptr_->startIndex_ + 1), (ringBuffer_raw_ptr_->endIndex_ + 0));
-      return PROCESS_FAIL;
+      // This scenario is ring buffer is empty.
+      std::memcpy(&ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->endIndex_], &indexBlock, sizeof(ringBufferIndexBlockType));
+      storePosition = ringBuffer_raw_ptr_->endIndex_;
+      ringBuffer_raw_ptr_->endIndex_ = calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1);
+      return PROCESS_RESULT::SUCCESS;
     }
     else if (calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1) == ringBuffer_raw_ptr_->startIndex_)
     {
       LOG_WARN("Ring buffer's full filled");
-      return PROCESS_FAIL;
+      return PROCESS_RESULT::BUFFER_FILL;
     }
     else if (calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1) != ringBuffer_raw_ptr_->startIndex_)
     {
       std::memcpy(&ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->endIndex_], &indexBlock, sizeof(ringBufferIndexBlockType));
       storePosition = ringBuffer_raw_ptr_->endIndex_;
       ringBuffer_raw_ptr_->endIndex_ = calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1);
-      return PROCESS_SUCCESS;
+      return PROCESS_RESULT::SUCCESS;
     }
-    return PROCESS_FAIL;
+    return PROCESS_RESULT::FAIL;
   }
 
   bool shmIndexRingBuffer::watchStartIndex(ringBufferIndexBlockType &indexBlock)
@@ -178,7 +169,7 @@ namespace  dawn
 
   bool shmIndexRingBuffer::watchEndIndex(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::named_mutex>       endLock(*(endIndex_mutex_ptr_), BI::defer_lock);
+    BI::scoped_lock<BI::interprocess_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_, BI::defer_lock);
     endLock.lock();
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
@@ -223,31 +214,24 @@ namespace  dawn
   shmMsgPool::shmMsgPool(std::string_view identity):
     defaultPriority_(0),
     identity_(identity),
+    mechanismIdentity_(MECHANISM_PREFIX + identity_),
     mqIdentity_(MESSAGE_QUEUE_PREFIX + identity_)
   {
     using namespace BI;
-    msgPoolInitialFlag_ptr_ = std::make_shared<named_semaphore>(open_or_create, identity_.c_str(), 1);
+    ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(mechanismIdentity_);
     availMsg_mq_ptr_ = std::make_shared<message_queue>(open_or_create, mqIdentity_.c_str(), SHM_BLOCK_NUM, sizeof(uint32_t));
     msgBufferShm_ptr_ = std::make_shared<shared_memory_object>(open_or_create, identity_.c_str(), read_write);
     msgBufferShm_ptr_->truncate(SHM_TOTAL_SIZE);
     msgBufferShmRegion_ptr_ = std::make_shared<mapped_region>(*(msgBufferShm_ptr_.get()), read_write);
     msgBuffer_raw_ptr_ = reinterpret_cast<void*>(msgBufferShmRegion_ptr_->get_address());
 
-    if (msgPoolInitialFlag_ptr_->try_wait())
+    if (ipc_ptr_->mechanism_raw_ptr_->msgPoolInitialFlag_.try_wait())
     {
       for (uint32_t i = 0; i < SHM_BLOCK_NUM; i++)
       {
         availMsg_mq_ptr_->send(&i, sizeof(i), defaultPriority_);
       }
     }
-  }
-
-  shmMsgPool::~shmMsgPool()
-  {
-    using namespace BI;
-    message_queue::remove(mqIdentity_.c_str());
-    named_semaphore::remove(identity_.c_str());
-    shared_memory_object::remove(identity_.c_str());
   }
 
   std::vector<uint32_t> shmMsgPool::requireMsgShm(uint32_t data_size)
@@ -316,8 +300,9 @@ namespace  dawn
     shmTransportImpl(std::string_view identity);
     ~shmTransportImpl() = default;
     bool write(const void *write_data, const uint32_t data_len);
-    bool read(void *read_data, uint32_t &data_len);
+    bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type);
     bool wait();
+    bool tryRead(void *read_data, uint32_t &data_len);
 
     protected:
     bool publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp);
@@ -325,6 +310,8 @@ namespace  dawn
     bool subscribeMsg(shmIndexRingBuffer::ringBufferIndexBlockType &block);
 
     bool recycleMsg(uint32_t msgIndex);
+
+    bool recycleExpireMsg();
 
     bool read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize);
 
@@ -361,9 +348,9 @@ namespace  dawn
     return impl_->write(write_data, data_len);
   }
 
-  bool shmTransport::read(void *read_data, uint32_t &data_len)
+  bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
   {
-    return impl_->read(read_data, data_len);
+    return impl_->read(read_data, data_len, block_type);
   }
 
   bool shmTransport::wait()
@@ -425,10 +412,23 @@ namespace  dawn
     return PROCESS_SUCCESS;
   }
 
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len)
+  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
   {
     //Block until message arrival
-    channel_.waitNotify();
+    if (block_type == BLOCK_TYPE::BLOCK)
+    {
+      channel_.waitNotify();
+
+    }
+    else
+    {
+      auto result = channel_.tryWaitNotify();
+      if (result == false)
+      {
+        return PROCESS_FAIL;
+      }
+    }
+
     shmIndexRingBuffer::ringBufferIndexBlockType block;
     if (subscribeMsg(block) == PROCESS_SUCCESS)
     {
@@ -443,6 +443,12 @@ namespace  dawn
     }
   }
 
+  bool shmTransport::shmTransportImpl::tryRead(void *read_data, uint32_t &data_len)
+  {
+    return PROCESS_SUCCESS;
+  }
+
+
   bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp)
   {
     shmIndexRingBuffer::ringBufferIndexBlockType ringBufferBlock;
@@ -450,11 +456,23 @@ namespace  dawn
     ringBufferBlock.shmMsgIndex_ = msgIndex;
     ringBufferBlock.msgSize_ = msgSize;
     ringBufferBlock.timeStamp_ = timeStamp;
+    auto result = ringBuffer_.moveEndIndex(ringBufferBlock, storePosition);
 
-    if (ringBuffer_.moveEndIndex(ringBufferBlock, storePosition) == PROCESS_FAIL)
+    if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
     {
       LOG_ERROR("can not write to ring buffer");
       return PROCESS_FAIL;
+    }
+    else if (result == shmIndexRingBuffer::PROCESS_RESULT::BUFFER_FILL)
+    {
+      recycleExpireMsg();
+      result = ringBuffer_.moveEndIndex(ringBufferBlock, storePosition);
+      if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
+      {
+        LOG_ERROR("can not write to ring buffer");
+        return PROCESS_FAIL;
+      }
+      return PROCESS_SUCCESS;
     }
     else
     {
@@ -491,6 +509,13 @@ namespace  dawn
       msgIndex = nextIndex;
     }
     return PROCESS_SUCCESS;
+  }
+
+  bool shmTransport::shmTransportImpl::recycleExpireMsg()
+  {
+    shmIndexRingBuffer::ringBufferIndexBlockType block;
+    ringBuffer_.moveStartIndex(block);
+    return recycleMsg(block.shmMsgIndex_);
   }
 
   bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize)
