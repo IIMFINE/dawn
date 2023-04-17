@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+#add dependency library
+find_dependency(spdlog REQUIRED)
+
+#include target file
+include("${CMAKE_CURRENT_LIST_DIR}/dawn-target.cmake")
