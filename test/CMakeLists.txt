@@ -12,7 +12,7 @@ set(ADD_THIRD_PARTY_LIB GTest::gtest)
 
 add_executable(test ${DIR_SRC}/test.cpp ${DIR_SRC}/test_impl.cpp ${DIR_SRC}/test_boost.cpp)
 
-add_dependencies(test common discovery_object)
+add_dependencies(test common discovery)
 
 #add head file directory
 target_include_directories(test PRIVATE ${DIR_HEAD_FILE} ${DIR_TEST_HEAD_FILE})
@@ -24,7 +24,7 @@ SET (CMAKE_VERBOSE_MAKEFILE 0)
 TARGET_LINK_LIBRARIES(test
 PRIVATE
 $<TARGET_OBJECTS:common>
-$<TARGET_OBJECTS:discovery_object>
+$<TARGET_OBJECTS:discovery>
 pthread
 rt
 ${ADD_THIRD_PARTY_LIB}
@@ -32,3 +32,5 @@ ${ADD_THIRD_PARTY_LIB}
 
 #CMAKE_SOURCE_DIR is the root entrance CMakeLists.txt directory
 set(EXECUTABLE_OUTPUT_PATH    ${CMAKE_SOURCE_DIR}/bin)
+
+
