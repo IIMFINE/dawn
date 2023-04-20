@@ -26,7 +26,7 @@ namespace dawn
     {
       if (auto timeSpanIt = timeCounter::timeSpan_.find(static_cast<std::string>(index)); timeSpanIt == timeCounter::timeSpan_.end())
       {
-        throw std::runtime_error("time counter " + static_cast<std::string>(index) + " doesn't exist");
+        throw std::runtime_error("dawn: time counter " + static_cast<std::string>(index) + " doesn't exist");
       }
       else
       {

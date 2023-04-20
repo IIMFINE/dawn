@@ -31,20 +31,13 @@ namespace dawn
 
     intrinsic_identity_sptr_ = std::shared_ptr<identityMessageFormat>(new(self_identity_mem) identityMessageFormat(topic_, participantId_, participantFlag),
       [](identityMessageFormat* mem) {
-        LOG_DEBUG("pan magicNum_ {}", mem->magicNum_);
-        LOG_DEBUG("pan topicLen_ {}", mem->topicLen_);
-
-        LOG_DEBUG("pan participantId_ {}", mem->participantId_);
-
-        LOG_DEBUG("pan flag_ {}", mem->flag_);
-        LOG_DEBUG("pan topicName_ {}", mem->topicName_);
 
         freeMem(mem);
       });
 
     if (intrinsic_udp_.initialize(unicastIp) == PROCESS_FAIL)
     {
-      throw std::runtime_error("can not initialize intrinsic_udp_");
+      throw std::runtime_error("dawn: can not initialize intrinsic_udp_");
     }
   }
 
@@ -60,20 +53,13 @@ namespace dawn
 
     intrinsic_identity_sptr_ = std::shared_ptr<identityMessageFormat>(new(self_identity_mem) identityMessageFormat(topic_, participantId_, participantFlag),
       [](identityMessageFormat* mem) {
-        LOG_DEBUG("pan magicNum_ {:x}", mem->magicNum_);
-        LOG_DEBUG("pan topicLen_ {}", mem->topicLen_);
-
-        LOG_DEBUG("pan participantId_ {}", mem->participantId_);
-
-        LOG_DEBUG("pan flag_ {}", mem->flag_);
-        LOG_DEBUG("pan topicName_ {}", mem->topicName_);
 
         freeMem(mem);
       });
 
     if (intrinsic_udp_.initialize(unicastIp) == PROCESS_FAIL)
     {
-      throw std::runtime_error("can not initialize intrinsic_udp_");
+      throw std::runtime_error("dawn: can not initialize intrinsic_udp_");
     }
   }
 
@@ -104,14 +90,6 @@ namespace dawn
     }
     else
     {
-      LOG_DEBUG("pan rx magicNum_ {:x}", message_sptr_->magicNum_);
-      LOG_DEBUG("pan rx topicLen_ {}", message_sptr_->topicLen_);
-
-      LOG_DEBUG("pan rx participantId_ {}", message_sptr_->participantId_);
-
-      LOG_DEBUG("pan rx flag_ {}", message_sptr_->flag_);
-      LOG_DEBUG("pan rx topicName_ {}", message_sptr_->topicName_);
-
       //check message is intact
       if (checkMessageIntact(message_sptr_, len) == PROCESS_SUCCESS)
       {

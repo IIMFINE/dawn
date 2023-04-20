@@ -189,7 +189,7 @@ namespace dawn
     auto memoryPtr = getMemBlockFromQueue(countRequestMemType);
     if (memoryPtr == nullptr)
     {
-      throw std::runtime_error("alloc a nullptr memory ptr");
+      throw std::runtime_error("dawn: alloc a nullptr memory ptr");
     }
     return memoryPtr;
   }
@@ -229,7 +229,7 @@ namespace dawn
     }
     else if (waterMarkIndex >= (threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0]))
     {
-      throw std::runtime_error("thread local memory pool is overflow");
+      throw std::runtime_error("dawn: thread local memory pool is overflow");
     }
     else if (waterMarkIndex == (threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0] - 1))
     {
@@ -242,7 +242,7 @@ namespace dawn
           LOG_WARN("can not free memory");
           if (waterChangeFlag == false)
           {
-            throw std::runtime_error("thread local memory pool will be overflow");
+            throw std::runtime_error("dawn: thread local memory pool will be overflow");
           }
           return PROCESS_FAIL;
         }
@@ -298,7 +298,7 @@ namespace dawn
           if (waterChangeFlag == false)
           {
             LOG_WARN("can not supplement thread local memory {} type", blockType);
-            throw std::runtime_error("there will be a breakdown in thread local memory");
+            throw std::runtime_error("dawn: there will be a breakdown in thread local memory");
           }
           else
           {
@@ -309,7 +309,7 @@ namespace dawn
     }
     else if (waterMarkIndex < 0)
     {
-      throw std::runtime_error("there is a breakdown in thread local memory");
+      throw std::runtime_error("dawn: there is a breakdown in thread local memory");
     }
     return PROCESS_SUCCESS;
   }
@@ -335,7 +335,7 @@ namespace dawn
   {
     if (releaseMemBlock == nullptr)
     {
-      throw std::runtime_error("try to release nullptr");
+      throw std::runtime_error("dawn: try to release nullptr");
     }
     return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemBlock);
   }

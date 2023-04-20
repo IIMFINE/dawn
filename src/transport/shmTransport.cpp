@@ -4,7 +4,8 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "shmTransport.h"
-#include "setLogger.h"
+#include "common/setLogger.h"
+#include "qosController.h"
 
 namespace  dawn
 {
@@ -14,7 +15,7 @@ namespace  dawn
     using namespace BI;
     if (identity.empty())
     {
-      throw std::runtime_error("shm channel identity is empty");
+      throw std::runtime_error("dawn: shm channel identity is empty");
     }
     ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(identity_);
   }
@@ -25,7 +26,7 @@ namespace  dawn
     identity_ = identity;
     if (identity.empty())
     {
-      throw std::runtime_error("shm channel identity is empty");
+      throw std::runtime_error("dawn: shm channel identity is empty");
     }
     ipc_ptr_ = std::make_shared<interprocessMechanism<IPC_t>>(identity_);
   }
@@ -169,14 +170,16 @@ namespace  dawn
 
   bool shmIndexRingBuffer::watchEndIndex(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_, BI::defer_lock);
-    endLock.lock();
+    BI::scoped_lock<BI::interprocess_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    // endLock.lock();
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
+      // endLock.unlock();
       return PROCESS_FAIL;
     }
     else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
     {
+      // endLock.unlock();
       LOG_WARN("ring buffer is empty");
       return PROCESS_FAIL;
     }
@@ -186,6 +189,7 @@ namespace  dawn
       endIndex_lock_ = std::move(endLock);
       return PROCESS_SUCCESS;
     }
+    // endLock.unlock();
     return PROCESS_FAIL;
   }
 
@@ -240,7 +244,7 @@ namespace  dawn
     uint32_t needBlockNum = (data_size + SHM_BLOCK_CONTENT_SIZE) / SHM_BLOCK_CONTENT_SIZE;
     if (needBlockNum > SHM_BLOCK_NUM)
     {
-      throw std::runtime_error("allocate too big share memory block");
+      throw std::runtime_error("dawn: allocate too big share memory block");
     }
     std::vector<uint32_t>   indexVec;
     indexVec.reserve(needBlockNum);
@@ -250,7 +254,12 @@ namespace  dawn
       auto index = requireOneBlock();
       if (index == SHM_INVALID_INDEX)
       {
-        throw std::runtime_error("too low shm resource");
+        for (auto it : indexVec)
+        {
+          recycleMsgShm(it);
+        }
+        //@todo add dawn exception
+        throw std::runtime_error("dawn: too low shm resource");
       }
       indexVec.emplace_back(index);
     }
@@ -263,7 +272,10 @@ namespace  dawn
     using namespace BI;
     uint32_t index = 0;
     message_queue::size_type recvd_size;
-    availMsg_mq_ptr_->receive(&index, sizeof(index), recvd_size, defaultPriority_);
+    if (availMsg_mq_ptr_->try_receive(&index, sizeof(index), recvd_size, defaultPriority_) == false)
+    {
+      return SHM_INVALID_INDEX;
+    }
     auto mem = FIND_SHARE_MEM_BLOCK_ADDR(msgBuffer_raw_ptr_, index);
 
     //initialize share memory block
@@ -297,17 +309,26 @@ namespace  dawn
 
   struct shmTransport::shmTransportImpl
   {
-    shmTransportImpl(std::string_view identity);
+    shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr);
     ~shmTransportImpl() = default;
     bool write(const void *write_data, const uint32_t data_len);
     bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type);
     bool wait();
-    bool tryRead(void *read_data, uint32_t &data_len);
 
     protected:
     bool publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp);
 
-    bool subscribeMsg(shmIndexRingBuffer::ringBufferIndexBlockType &block);
+    /// @brief Read the latest index block from ring buffer and will lock end index of ring buffer.
+    ///        Need to use unlockEndIndex() to unlock end index of ring buffer.
+    /// @param block 
+    /// @return PROCESS_SUCCESS if read index block successfully and will lock end index, otherwise return PROCESS_FAIL.
+    bool subscribeMsgAndLockEnd(shmIndexRingBuffer::ringBufferIndexBlockType &block);
+
+    /// @brief Unlock end index of ring buffer.
+    /// @return
+    void unlockEndIndex();
+
+    std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size);
 
     bool recycleMsg(uint32_t msgIndex);
 
@@ -318,10 +339,10 @@ namespace  dawn
     protected:
     std::string           identity_;
     void                  *msgShm_raw_ptr_;
-    shmChannel            channel_;
-    shmMsgPool            shmPool_;
-    shmIndexRingBuffer    ringBuffer_;
-    std::pair<uint32_t, shmIndexRingBuffer::ringBufferIndexBlockType>     publishedMsgPair_;
+    std::shared_ptr<shmChannel>            channel_ptr_;
+    std::shared_ptr<shmMsgPool>            shmPool_ptr_;
+    std::shared_ptr<shmIndexRingBuffer>    ringBuffer_ptr_;
+    std::shared_ptr<qosController>         qosController_ptr_;
   };
 
   shmTransport::shmTransport()
@@ -332,14 +353,14 @@ namespace  dawn
   {
   }
 
-  shmTransport::shmTransport(std::string_view identity)
+  shmTransport::shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity);
+    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
   }
 
-  void shmTransport::initialize(std::string_view identity)
+  void shmTransport::initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity);
+    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
   }
 
 
@@ -358,18 +379,20 @@ namespace  dawn
     return PROCESS_SUCCESS;
   }
 
-  shmTransport::shmTransportImpl::shmTransportImpl(std::string_view identity):
-    identity_(identity),
-    channel_(CHANNEL_PREFIX + identity_),
-    shmPool_(),
-    ringBuffer_(RING_BUFFER_PREFIX + identity_)
+  shmTransport::shmTransportImpl::shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr):
+    identity_(identity)
   {
-    msgShm_raw_ptr_ = shmPool_.getMsgRawBuffer();
+    channel_ptr_ = std::make_shared<shmChannel>(CHANNEL_PREFIX + identity_);
+    shmPool_ptr_ = std::make_shared<shmMsgPool>();
+    ringBuffer_ptr_ = std::make_shared<shmIndexRingBuffer>(RING_BUFFER_PREFIX + identity_);
+    msgShm_raw_ptr_ = shmPool_ptr_->getMsgRawBuffer();
+    qosController_ptr_ = std::shared_ptr<qosController>(dynamic_cast<qosController*>(new efficientQosController_shm(*(qosCfg_ptr.get()))));
   }
 
   bool shmTransport::shmTransportImpl::write(const void *write_data, const uint32_t data_len)
   {
-    auto msg_vec = shmPool_.requireMsgShm(data_len);
+    auto msg_vec = retryRequireMsgShm(data_len);
+
     assert(msg_vec.size() != 0 && "can not allocate shm");
 
     msgType   *prev_msg = nullptr;
@@ -381,7 +404,7 @@ namespace  dawn
       auto msgBlockIns = new(msgBlock) msgType;
       if (wait2writeLen <= SHM_BLOCK_CONTENT_SIZE)
       {
-        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, data_len);
+        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, wait2writeLen);
       }
       else
       {
@@ -393,6 +416,7 @@ namespace  dawn
       if (prev_msg != nullptr)
       {
         prev_msg->next_ = msgIndex;
+        prev_msg = msgBlockIns;
       }
       else
       {
@@ -407,47 +431,57 @@ namespace  dawn
       return PROCESS_FAIL;
     }
 
-    channel_.notifyAll();
+    channel_ptr_->notifyAll();
 
     return PROCESS_SUCCESS;
   }
 
   bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
   {
+    shmIndexRingBuffer::ringBufferIndexBlockType block;
+
+    //Try to get the latest index block to taste.
+    if (subscribeMsgAndLockEnd(block) == PROCESS_SUCCESS)
+    {
+      if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
+      {
+        qosController_ptr_->updateLatestMsg(&block);
+        auto result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
+        unlockEndIndex();
+        return result;
+      }
+      else
+      {
+        unlockEndIndex();
+      }
+    }
+
     //Block until message arrival
     if (block_type == BLOCK_TYPE::BLOCK)
     {
-      channel_.waitNotify();
-
+      channel_ptr_->waitNotify();
     }
     else
     {
-      auto result = channel_.tryWaitNotify();
+      auto result = channel_ptr_->tryWaitNotify();
       if (result == false)
       {
         return PROCESS_FAIL;
       }
     }
 
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    if (subscribeMsg(block) == PROCESS_SUCCESS)
+    if (subscribeMsgAndLockEnd(block) == PROCESS_SUCCESS)
     {
-      auto result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
-      ringBuffer_.stopWatchEndIndex();
-      return result;
+      if (qosController_ptr_->updateLatestMsg(&block) == PROCESS_SUCCESS)
+      {
+        auto result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
+        unlockEndIndex();
+        return result;
+      }
     }
-    else
-    {
-      ringBuffer_.stopWatchEndIndex();
-      return PROCESS_FAIL;
-    }
+    unlockEndIndex();
+    return PROCESS_FAIL;
   }
-
-  bool shmTransport::shmTransportImpl::tryRead(void *read_data, uint32_t &data_len)
-  {
-    return PROCESS_SUCCESS;
-  }
-
 
   bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp)
   {
@@ -456,7 +490,7 @@ namespace  dawn
     ringBufferBlock.shmMsgIndex_ = msgIndex;
     ringBufferBlock.msgSize_ = msgSize;
     ringBufferBlock.timeStamp_ = timeStamp;
-    auto result = ringBuffer_.moveEndIndex(ringBufferBlock, storePosition);
+    auto result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
 
     if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
     {
@@ -466,7 +500,7 @@ namespace  dawn
     else if (result == shmIndexRingBuffer::PROCESS_RESULT::BUFFER_FILL)
     {
       recycleExpireMsg();
-      result = ringBuffer_.moveEndIndex(ringBufferBlock, storePosition);
+      result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
       if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
       {
         LOG_ERROR("can not write to ring buffer");
@@ -478,16 +512,14 @@ namespace  dawn
     {
       LOG_DEBUG("shm publish successfully");
       ///@todo record the latest message
-      // publishedMsgPair_.first = storePosition;
-      // publishedMsgPair_.second = ringBufferBlock;
       return PROCESS_SUCCESS;
     }
     return PROCESS_SUCCESS;
   }
 
-  bool shmTransport::shmTransportImpl::subscribeMsg(shmIndexRingBuffer::ringBufferIndexBlockType &block)
+  bool shmTransport::shmTransportImpl::subscribeMsgAndLockEnd(shmIndexRingBuffer::ringBufferIndexBlockType &block)
   {
-    if (ringBuffer_.watchEndIndex(block) == PROCESS_FAIL)
+    if (ringBuffer_ptr_->watchEndIndex(block) == PROCESS_FAIL)
     {
       return PROCESS_FAIL;
     }
@@ -495,6 +527,30 @@ namespace  dawn
     {
       return PROCESS_SUCCESS;
     }
+  }
+
+  void shmTransport::shmTransportImpl::unlockEndIndex()
+  {
+    ringBuffer_ptr_->stopWatchEndIndex();
+  }
+
+  std::vector<uint32_t> shmTransport::shmTransportImpl::retryRequireMsgShm(uint32_t data_size)
+  {
+    int retryTime = 3;
+    for (int i = 0; i < retryTime; i++)
+    {
+      try
+      {
+        auto msg_vec = shmPool_ptr_->requireMsgShm(data_size);
+        return msg_vec;
+      }
+      catch (const std::exception& e)
+      {
+        LOG_ERROR("message shm pool is too low");
+        recycleExpireMsg();
+      }
+    }
+    return std::vector<uint32_t>{};
   }
 
   bool shmTransport::shmTransportImpl::recycleMsg(uint32_t msgIndex)
@@ -505,7 +561,7 @@ namespace  dawn
       auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
       auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
       auto nextIndex = msgBlockIns->next_;
-      shmPool_.recycleMsgShm(msgIndex);
+      shmPool_ptr_->recycleMsgShm(msgIndex);
       msgIndex = nextIndex;
     }
     return PROCESS_SUCCESS;
@@ -514,7 +570,7 @@ namespace  dawn
   bool shmTransport::shmTransportImpl::recycleExpireMsg()
   {
     shmIndexRingBuffer::ringBufferIndexBlockType block;
-    ringBuffer_.moveStartIndex(block);
+    ringBuffer_ptr_->moveStartIndex(block);
     return recycleMsg(block.shmMsgIndex_);
   }
 
@@ -545,10 +601,11 @@ namespace  dawn
       msgIndex = msgBlockIns->next_;
     }
 
-    if (data_len != 0)
+    if (data_len == msgSize)
     {
       return PROCESS_SUCCESS;
     }
+    LOG_WARN("message size is truncated {}, actual size {}", data_len, msgSize);
     return PROCESS_FAIL;
   }
 
