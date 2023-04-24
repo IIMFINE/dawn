@@ -1,6 +1,6 @@
 #ifndef __TRANSPORT_H__
 #define __TRANSPORT_H__
-#include "type.h"
+#include "common/type.h"
 
 namespace dawn
 {
@@ -16,7 +16,6 @@ namespace dawn
     virtual bool wait() = 0;
   };
 }
-
 
 #endif
 

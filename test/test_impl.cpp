@@ -10,7 +10,8 @@
 #include "common/multicast.h"
 #include "discovery/discovery.h"
 #include "common/baseOperator.h"
-#include "common/shmTransport.h"
+#include "transport/shmTransport.h"
+#include "transport/qosController.h"
 
 TEST(test_dawn, find_bit_position_benchmark)
 {
@@ -86,7 +87,7 @@ TEST(test_dawn, test_TL_memory)
     if (test1 == nullptr)
     {
       LOG_ERROR("alloc a nullptr");
-      throw std::runtime_error("alloc a nullptr");
+      throw std::runtime_error("dawn: alloc a nullptr");
     }
     });
   auto future2 = std::async(std::launch::async, []() {
@@ -94,7 +95,7 @@ TEST(test_dawn, test_TL_memory)
     if (test1 == nullptr)
     {
       LOG_ERROR("alloc a nullptr");
-      throw std::runtime_error("alloc a nullptr");
+      throw std::runtime_error("dawn: alloc a nullptr");
     }
     });
   auto future3 = std::async(std::launch::async, []() {
@@ -102,7 +103,7 @@ TEST(test_dawn, test_TL_memory)
     if (test1 == nullptr)
     {
       LOG_ERROR("alloc a nullptr");
-      throw std::runtime_error("alloc a nullptr");
+      throw std::runtime_error("dawn: alloc a nullptr");
     }
     });
   auto future4 = std::async(std::launch::async, []() {
@@ -110,7 +111,7 @@ TEST(test_dawn, test_TL_memory)
     if (test1 == nullptr)
     {
       LOG_ERROR("alloc a nullptr");
-      throw std::runtime_error("alloc a nullptr");
+      throw std::runtime_error("dawn: alloc a nullptr");
     }
     });
 }
@@ -207,7 +208,7 @@ TEST(test_dawn, test_shm_pool)
   std::cout << std::endl;
 }
 
-TEST(test_dawn, test_shmTp_read)
+TEST(test_dawn, test_shmTp_read_loop)
 {
   using namespace dawn;
   using TP = abstractTransport;
@@ -224,12 +225,63 @@ TEST(test_dawn, test_shmTp_read)
     {
       LOG_INFO("end");
       LOG_INFO("receive data {}", data);
+      std::cout << "receive data " << data << std::endl;
     }
     std::memset(data, 0x0, 1000);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
   }
 }
 
-TEST(test_dawn, test_shmTp_write_data)
+TEST(test_dawn, test_shmTp_read_loop_block)
+{
+
+  using namespace dawn;
+  using TP = abstractTransport;
+  shmTransport shm_tp("hello_world_dawn");
+  for (;;)
+  {
+    char* data = new char[9 * 1024 * 1024];
+    uint32_t len = 0;
+    if (shm_tp.read(data, len, TP::BLOCK_TYPE::BLOCK) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+    else
+    {
+      LOG_INFO("end");
+      LOG_INFO("receive data {}", data);
+      std::cout << "receive data " << data << std::endl;
+      std::cout << "receive data len " << len << std::endl << std::endl;
+    }
+    delete data;
+  }
+}
+
+TEST(test_dawn, test_shmTp_read_one_slot)
+{
+  using namespace dawn;
+  using TP = abstractTransport;
+  shmTransport shm_tp("hello_world_dawn");
+  {
+    char* data = new char[9 * 1024 * 1024];
+    uint32_t len = 0;
+    if (shm_tp.read(data, len, TP::BLOCK_TYPE::NON_BLOCK) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+    else
+    {
+      LOG_INFO("end");
+      LOG_INFO("receive data {}", data);
+      std::cout << "receive data " << data << std::endl;
+      std::cout << "len " << len << std::endl;
+    }
+    delete data;
+  }
+}
+
+TEST(test_dawn, test_shmTp_write_small_data)
 {
   using namespace dawn;
   shmTransport shm_tp("hello_world_dawn");
@@ -244,20 +296,63 @@ TEST(test_dawn, test_shmTp_write_data)
   }
 }
 
-TEST(test_dawn, test_shmTp_write_small_data_loop)
+
+/// @brief publish a 9Mb data
+/// @param  
+/// @param  
+TEST(test_dawn, test_shmTp_write_large_data)
 {
   using namespace dawn;
+  SET_LOGGER_FILENAME("write_large_data");
   shmTransport shm_tp("hello_world_dawn");
-  for (int i = 0; i < 1000; i++)
   {
-    std::string data = "helloWorld";
-    data += std::to_string(i);
-    LOG_INFO("message data {}", data);
+    std::string data = "helloWorld large data";
+
+    data.resize(1024 * 1024 * 9);
+
+    std::cout << "publish data " << data << std::endl;
     if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
     {
       std::cout << "failed" << std::endl;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+}
+
+TEST(test_dawn, test_shmTp_write_large_data_loop)
+{
+  using namespace dawn;
+  shmTransport shm_tp("hello_world_dawn");
+
+  for (int i = 0; i < 0xfff; i++)
+  {
+    std::string data = "helloWorld";
+    data += std::to_string(i);
+    std::cout << "publish data " << data << std::endl;
+    data.resize(1024 * 1024 * 9);
+    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+}
+
+
+TEST(test_dawn, test_shmTp_write_small_data_loop)
+{
+  using namespace dawn;
+  shmTransport shm_tp("hello_world_dawn");
+  for (int i = 0;; i++)
+  {
+    std::string data = "helloWorld";
+    data += std::to_string(i);
+    std::cout << "publish data " << data << std::endl;
+    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 }
 

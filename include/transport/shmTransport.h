@@ -16,7 +16,7 @@
 #include <boost/interprocess/ipc/message_queue.hpp>
 
 #include "transport.h"
-#include "setLogger.h"
+#include "common/setLogger.h"
 
 namespace dawn
 {
@@ -24,12 +24,12 @@ namespace dawn
   ///        each size of block is 12 byte.
   constexpr const uint8_t SHM_INDEX_BLOCK_SIZE = 4 * 3;
   constexpr const uint8_t SHM_INDEX_RING_BUFFER_HEAD_SIZE = 4 * 3;
-  constexpr const uint32_t SHM_BLOCK_NUM = 2560;
+  constexpr const uint32_t SHM_BLOCK_NUM = 1024 * 10;
   /// @brief BLOCK content: |next, message|...|...
   constexpr const uint32_t SHM_BLOCK_HEAD_SIZE = 4;
   constexpr const uint32_t SHM_BLOCK_CONTENT_SIZE = 1024;
   constexpr const uint32_t SHM_BLOCK_SIZE = SHM_BLOCK_CONTENT_SIZE + SHM_BLOCK_HEAD_SIZE;
-  /// @brief total sum of content size is 20MBit
+  /// @brief total sum of content size is 10M byte.
   constexpr const uint32_t SHM_TOTAL_CONTENT_SIZE = SHM_BLOCK_CONTENT_SIZE * SHM_BLOCK_NUM;
   constexpr const uint32_t SHM_TOTAL_SIZE = SHM_BLOCK_NUM * SHM_BLOCK_SIZE;
   constexpr const uint32_t SHM_RING_BUFFER_SIZE = SHM_INDEX_BLOCK_SIZE * SHM_BLOCK_NUM + SHM_INDEX_RING_BUFFER_HEAD_SIZE;
@@ -43,8 +43,10 @@ namespace dawn
 #define FIND_SHARE_MEM_BLOCK_ADDR(head, index)  (((char*)head) + (index * SHM_BLOCK_SIZE))
 #define FIND_NEXT_MESSAGE_BLOCK_ADDR(head, index)   (((char*)head) + (reinterpret_cast<msgType*>((char*)head) + (index * SHM_BLOCK_SIZE)->next_))
 
-  namespace BI = boost::interprocess;
   struct shmTransport;
+  struct qosCfg;
+
+  namespace BI = boost::interprocess;
 
   template<typename T>
   struct interprocessMechanism
@@ -174,9 +176,10 @@ namespace dawn
     /// @return 
     bool watchStartIndex(ringBufferIndexBlockType &indexBlock);
 
-    /// @brief Watch end index and lock end index mutex until operation finish.
+    /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
     /// @param indexBlock 
-    /// @return PROCESS_SUCCESS: lock successfully and read buffer. PROCESS_FAIL: lock failed or buffer is empty.
+    /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
+    ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
     bool watchEndIndex(ringBufferIndexBlockType &indexBlock);
 
     /// @brief Unlock end index.
@@ -202,7 +205,7 @@ namespace dawn
     std::shared_ptr<interprocessMechanism<IPC_t>>   ipc_ptr_;
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
-    BI::scoped_lock<BI::interprocess_mutex>                endIndex_lock_;
+    BI::scoped_lock<BI::interprocess_mutex>         endIndex_lock_;
 
     ringBufferType                                  *ringBuffer_raw_ptr_;
     std::string                                     shmIdentity_;
@@ -254,9 +257,9 @@ namespace dawn
     std::unique_ptr<shmTransportImpl>  impl_;
 
     shmTransport();
-    shmTransport(std::string_view identity);
+    shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
     ~shmTransport();
-    void initialize(std::string_view identity);
+    void initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
 
     virtual bool write(const void *write_data, const uint32_t data_len) override;
 

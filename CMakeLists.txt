@@ -22,6 +22,7 @@ if(NOT TARGET spdlog)
 endif()
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/common)
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/transport)
 
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/client)
 # add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/server)
@@ -36,7 +37,7 @@ set(lib_name ${PROJECT_NAME})
 set(export_name export_dawn)
 
 # create export library
-add_library(${lib_name} SHARED $<TARGET_OBJECTS:common> $<TARGET_OBJECTS:discovery>)
+add_library(${lib_name} SHARED $<TARGET_OBJECTS:common> $<TARGET_OBJECTS:discovery> $<TARGET_OBJECTS:transport>)
 
 TARGET_LINK_LIBRARIES(${lib_name} PUBLIC pthread rt)
 # create version file
