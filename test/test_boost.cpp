@@ -13,6 +13,11 @@
 #include <boost/interprocess/sync/sharable_lock.hpp>
 #include <boost/interprocess/sync/upgradable_lock.hpp>
 
+#include <signal.h>
+TEST(test_core_dump, test_core_dump)
+{
+  raise(SIGABRT);
+}
 
 namespace BI = boost::interprocess;
 
@@ -225,21 +230,25 @@ TEST(test_boost, test_semaphore_wait)
 
 struct test_anonymous
 {
-  BI::interprocess_mutex    mutex_;
+  BI::interprocess_mutex    mutex_1_;
+  BI::interprocess_mutex    mutex_2_;
 };
 
-TEST(test_boost, test_anonymous_mutex)
+TEST(test_boost, test_deadlock_1)
 {
   using namespace BI;
-  shared_memory_object  shm(BI::open_or_create, "hello_world", read_write);
+  shared_memory_object  shm(BI::open_or_create, "test_mutex", read_write);
   shm.truncate(sizeof(test_anonymous));
   mapped_region region(shm, read_write);
   auto addr = region.get_address();
   auto test_anonymous_ptr = new (addr) test_anonymous;
-  {
-    scoped_lock<interprocess_mutex>  lock(test_anonymous_ptr->mutex_);
-    std::cout << "end " << std::endl;
-  }
+
+  scoped_lock<interprocess_mutex>  lock1(test_anonymous_ptr->mutex_1_);
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  scoped_lock<interprocess_mutex>  lock2(test_anonymous_ptr->mutex_2_);
+
+  std::cout << "end " << std::endl;
+
   while (1)
   {
     /* code */
@@ -247,15 +256,62 @@ TEST(test_boost, test_anonymous_mutex)
   }
 }
 
-TEST(test_boost, test_anonymous_mutex2)
+TEST(test_boost, test_deadlock_2)
 {
   using namespace BI;
-  shared_memory_object  shm(BI::open_or_create, "hello_world", read_write);
+  shared_memory_object  shm(BI::open_or_create, "test_mutex", read_write);
   shm.truncate(sizeof(test_anonymous));
   mapped_region region(shm, read_write);
   auto addr = region.get_address();
   auto test_anonymous_ptr = static_cast<test_anonymous*>(addr);
-  scoped_lock<interprocess_mutex>  lock(test_anonymous_ptr->mutex_);
+
+  scoped_lock<interprocess_mutex>  lock2(test_anonymous_ptr->mutex_2_);
+  std::this_thread::sleep_for(std::chrono::seconds(5));
+  scoped_lock<interprocess_mutex>  lock1(test_anonymous_ptr->mutex_1_);
+
+  std::cout << "end " << std::endl;
+  while (1)
+  {
+    std::this_thread::yield();
+  }
+}
+
+
+TEST(test_boost, test_lock_recurse)
+{
+  using namespace BI;
+  shared_memory_object  shm(BI::open_or_create, "test_mutex_recurse", read_write);
+  shm.truncate(sizeof(test_anonymous));
+  mapped_region region(shm, read_write);
+  auto addr = region.get_address();
+  auto test_anonymous_ptr = new (addr) test_anonymous;
+
+  scoped_lock<interprocess_mutex>  lock2(test_anonymous_ptr->mutex_2_);
+  // scoped_lock<interprocess_mutex>  lock1(test_anonymous_ptr->mutex_2_);
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  std::cout << "end " << std::endl;
+  while (1)
+  {
+    std::this_thread::yield();
+  }
+}
+
+TEST(test_boost, test_lock_release_twice)
+{
+  using namespace BI;
+  shared_memory_object  shm(BI::open_or_create, "test_mutex_release", read_write);
+  shm.truncate(sizeof(test_anonymous));
+  mapped_region region(shm, read_write);
+  auto addr = region.get_address();
+  auto test_anonymous_ptr = new (addr) test_anonymous;
+
+  scoped_lock<interprocess_mutex>  lock2(test_anonymous_ptr->mutex_2_);
+  // scoped_lock<interprocess_mutex>  lock1(test_anonymous_ptr->mutex_2_);
+  lock2.unlock();
+  lock2.unlock();
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
   std::cout << "end " << std::endl;
   while (1)
   {

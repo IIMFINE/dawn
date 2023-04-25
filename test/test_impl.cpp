@@ -233,29 +233,39 @@ TEST(test_dawn, test_shmTp_read_loop)
   }
 }
 
+#include <signal.h>
+
 TEST(test_dawn, test_shmTp_read_loop_block)
 {
-
   using namespace dawn;
   using TP = abstractTransport;
   shmTransport shm_tp("hello_world_dawn");
-  for (;;)
+  try
   {
-    char* data = new char[9 * 1024 * 1024];
-    uint32_t len = 0;
-    if (shm_tp.read(data, len, TP::BLOCK_TYPE::BLOCK) == PROCESS_FAIL)
+    for (;;)
     {
-      std::cout << "failed" << std::endl;
+      char* data = new char[9 * 1024 * 1024];
+      uint32_t len = 0;
+      if (shm_tp.read(data, len, TP::BLOCK_TYPE::BLOCK) == PROCESS_FAIL)
+      {
+        std::cout << "failed" << std::endl;
+      }
+      else
+      {
+        LOG_INFO("end");
+        LOG_INFO("receive data {}", data);
+        std::cout << "receive data " << data << std::endl;
+        std::cout << "receive data len " << len << std::endl << std::endl;
+      }
+      delete data;
     }
-    else
-    {
-      LOG_INFO("end");
-      LOG_INFO("receive data {}", data);
-      std::cout << "receive data " << data << std::endl;
-      std::cout << "receive data len " << len << std::endl << std::endl;
-    }
-    delete data;
   }
+  catch (const std::exception& e)
+  {
+    std::cerr << e.what() << '\n';
+    raise(SIGABRT);
+  }
+
 }
 
 TEST(test_dawn, test_shmTp_read_one_slot)
@@ -308,7 +318,7 @@ TEST(test_dawn, test_shmTp_write_large_data)
   {
     std::string data = "helloWorld large data";
 
-    data.resize(1024 * 1024 * 9);
+    data.resize(1024 * 1024);
 
     std::cout << "publish data " << data << std::endl;
     if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
@@ -324,17 +334,17 @@ TEST(test_dawn, test_shmTp_write_large_data_loop)
   using namespace dawn;
   shmTransport shm_tp("hello_world_dawn");
 
-  for (int i = 0; i < 0xfff; i++)
+  for (int i = 0; i < 0xffff; i++)
   {
     std::string data = "helloWorld";
     data += std::to_string(i);
     std::cout << "publish data " << data << std::endl;
-    data.resize(1024 * 1024 * 9);
+    data.resize(1024 * 1024);
     if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
     {
       std::cout << "failed" << std::endl;
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 }
 

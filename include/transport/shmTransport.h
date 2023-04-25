@@ -180,11 +180,11 @@ namespace dawn
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
     ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
-    bool watchEndIndex(ringBufferIndexBlockType &indexBlock);
+    bool watchRingBuffer(ringBufferIndexBlockType &indexBlock);
 
-    /// @brief Unlock end index.
+    /// @brief Unlock ring buffer.
     /// @return 
-    bool stopWatchEndIndex();
+    bool stopWatchRingBuffer();
 
     /// @brief Pass indexBlock to compare the the block pointing by start index. If they are same, start index will move.
     /// @param indexBlock 
@@ -206,6 +206,7 @@ namespace dawn
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
     BI::scoped_lock<BI::interprocess_mutex>         endIndex_lock_;
+    BI::scoped_lock<BI::interprocess_mutex>         startIndex_lock_;
 
     ringBufferType                                  *ringBuffer_raw_ptr_;
     std::string                                     shmIdentity_;
