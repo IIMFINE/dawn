@@ -1,5 +1,4 @@
 #include <cassert>
-#include <ctime>
 #include <chrono>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
@@ -328,6 +327,11 @@ namespace  dawn
     /// @return
     void unlockRingBuffer();
 
+    /// @brief Get a microsecond timestamp.
+    ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
+    /// @return microsecond timestamp.
+    uint32_t  getTimestamp();
+
     std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size);
 
     bool recycleMsg(uint32_t msgIndex);
@@ -429,9 +433,7 @@ namespace  dawn
       }
     }
 
-    auto msgHeadIndex = msg_vec[0];
-
-    if (publishMsg(msgHeadIndex, data_len, std::time(0)) == PROCESS_FAIL)
+    if (publishMsg(msg_vec[0], data_len, getTimestamp()) == PROCESS_FAIL)
     {
       return PROCESS_FAIL;
     }
@@ -461,10 +463,28 @@ namespace  dawn
       }
     }
 
+    auto subscribeMsg_func = [&block, this, &read_data, &data_len]() {
+      bool result = false;
+      if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
+      {
+        if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
+        {
+          qosController_ptr_->updateLatestMsg(&block);
+          if (read(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+          {
+            result = true;
+          }
+        }
+        unlockRingBuffer();
+      }
+      return result;
+    };
+
     //Block until message arrival
     if (block_type == BLOCK_TYPE::BLOCK)
     {
-      channel_ptr_->waitNotify();
+      channel_ptr_->waitNotify(subscribeMsg_func);
+      return PROCESS_SUCCESS;
     }
     else
     {
@@ -475,16 +495,6 @@ namespace  dawn
       }
     }
 
-    if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-    {
-      bool result = PROCESS_FAIL;
-      if (qosController_ptr_->updateLatestMsg(&block) == PROCESS_SUCCESS)
-      {
-        result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
-      }
-      unlockRingBuffer();
-      return result;
-    }
     return PROCESS_FAIL;
   }
 
@@ -504,6 +514,7 @@ namespace  dawn
     }
     else if (result == shmIndexRingBuffer::PROCESS_RESULT::BUFFER_FILL)
     {
+      //Best effort to publish the message.
       recycleExpireMsg();
       result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
       if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
@@ -543,6 +554,13 @@ namespace  dawn
       lockMsgFlag_ = false;
     }
   }
+
+  uint32_t  shmTransport::shmTransportImpl::getTimestamp()
+  {
+    using namespace std::chrono;
+    return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch()).count();
+  }
+
 
   std::vector<uint32_t> shmTransport::shmTransportImpl::retryRequireMsgShm(uint32_t data_size)
   {

@@ -208,31 +208,6 @@ TEST(test_dawn, test_shm_pool)
   std::cout << std::endl;
 }
 
-TEST(test_dawn, test_shmTp_read_loop)
-{
-  using namespace dawn;
-  using TP = abstractTransport;
-  shmTransport shm_tp("hello_world_dawn");
-  for (;;)
-  {
-    char data[1000];
-    uint32_t len = 0;
-    if (shm_tp.read(data, len, TP::BLOCK_TYPE::NON_BLOCK) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    else
-    {
-      LOG_INFO("end");
-      LOG_INFO("receive data {}", data);
-      std::cout << "receive data " << data << std::endl;
-    }
-    std::memset(data, 0x0, 1000);
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-  }
-}
-
 #include <signal.h>
 
 TEST(test_dawn, test_shmTp_read_loop_block)
@@ -252,7 +227,6 @@ TEST(test_dawn, test_shmTp_read_loop_block)
       }
       else
       {
-        LOG_INFO("end");
         LOG_INFO("receive data {}", data);
         std::cout << "receive data " << data << std::endl;
         std::cout << "receive data len " << len << std::endl << std::endl;
@@ -282,7 +256,6 @@ TEST(test_dawn, test_shmTp_read_one_slot)
     }
     else
     {
-      LOG_INFO("end");
       LOG_INFO("receive data {}", data);
       std::cout << "receive data " << data << std::endl;
       std::cout << "len " << len << std::endl;
@@ -307,7 +280,7 @@ TEST(test_dawn, test_shmTp_write_small_data)
 }
 
 
-/// @brief publish a 9Mb data
+/// @brief publish a 64k bytes data
 /// @param  
 /// @param  
 TEST(test_dawn, test_shmTp_write_large_data)
@@ -318,7 +291,7 @@ TEST(test_dawn, test_shmTp_write_large_data)
   {
     std::string data = "helloWorld large data";
 
-    data.resize(1024 * 1024);
+    data.resize(64 * 1024);
 
     std::cout << "publish data " << data << std::endl;
     if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
@@ -332,22 +305,22 @@ TEST(test_dawn, test_shmTp_write_large_data)
 TEST(test_dawn, test_shmTp_write_large_data_loop)
 {
   using namespace dawn;
+  SET_LOGGER_FILENAME("publisher");
   shmTransport shm_tp("hello_world_dawn");
 
   for (int i = 0; i < 0xffff; i++)
   {
-    std::string data = "helloWorld";
+    std::string data = "helloWorld large data";
     data += std::to_string(i);
     std::cout << "publish data " << data << std::endl;
-    data.resize(1024 * 1024);
+    data.resize(64 * 1024);
     if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
     {
       std::cout << "failed" << std::endl;
     }
-    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    LOG_INFO("publish data i {}", i);
   }
 }
-
 
 TEST(test_dawn, test_shmTp_write_small_data_loop)
 {

@@ -110,6 +110,8 @@ namespace dawn
     void initialize(std::string_view identity);
     void notifyAll();
     void waitNotify();
+    template<typename FUNC_T>
+    void waitNotify(FUNC_T&& func);
     bool tryWaitNotify(uint32_t microseconds = 1);
     protected:
     std::string                                 identity_;
@@ -269,6 +271,13 @@ namespace dawn
     virtual bool wait() override;
   };
 
+  template<typename FUNC_T>
+  void shmChannel::waitNotify(FUNC_T&& func)
+  {
+    using namespace BI;
+    scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
+    ipc_ptr_->mechanism_raw_ptr_->condition_.wait(lock, std::forward<FUNC_T>(func));
+  }
 }
 
 #endif
