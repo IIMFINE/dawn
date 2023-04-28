@@ -1,4 +1,10 @@
 #include "gtest/gtest.h"
+#include "test_helper.h"
+
+namespace dawn
+{
+  std::map<std::string, unsigned int> timeCounter::timeSpan_{};
+}
 
 int main(int argc, char **argv)
 {
