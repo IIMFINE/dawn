@@ -2,16 +2,42 @@
 
 namespace dawn
 {
-
-  threadPool::threadPool() : should_wakeup_(false)
+  threadPool::~threadPool()
   {
+    quitAllThreads();
   }
 
   void threadPool::init(uint32_t workThreadNum)
   {
+    std::lock_guard<std::mutex>     lock(threadListMutex_);
     for (uint32_t i = 0; i < workThreadNum; i++)
     {
-      threadList_.push_back(new std::thread(std::bind(&threadPool::workThreadRun, this)));
+      threadList_.emplace_back(std::make_unique<std::thread>(std::bind(&threadPool::workThreadRun, this)));
+    }
+    threadList_.emplace_back(std::make_unique<std::thread>(std::bind(&threadPool::workThreadMaintainer, this)));
+  }
+
+  void threadPool::addWorkThread(uint32_t workThreadNum)
+  {
+    std::lock_guard<std::mutex>     lock(threadListMutex_);
+    for (uint32_t i = 0; i < workThreadNum; i++)
+    {
+      threadList_.emplace_back(std::make_unique<std::thread>(std::bind(&threadPool::workThreadRun, this)));
+    }
+  }
+
+  void threadPool::workThreadMaintainer()
+  {
+    int                     lastTaskNum = 0xffff;
+    constexpr uint32_t      watchSpanTime = 2;
+    for (; runThreadFlag_ != ENUM_THREAD_STATUS::EXIT;)
+    {
+      if (taskNumber_.load(std::memory_order_acquire) > lastTaskNum)
+      {
+        addWorkThread();
+      }
+      lastTaskNum = taskNumber_.load(std::memory_order_acquire);
+      std::this_thread::sleep_for(std::chrono::seconds(watchSpanTime));
     }
   }
 
@@ -19,12 +45,12 @@ namespace dawn
   {
     runThreadFlag_ = ENUM_THREAD_STATUS::EXIT;
     threadCond_.notify_all();
-    for (auto &threadItor : threadList_)
+    std::lock_guard<std::mutex>     lock(threadListMutex_);
+    for (auto &threadIter : threadList_)
     {
-      if (threadItor->joinable())
+      if (threadIter->joinable())
       {
-        threadItor->join();
-        delete threadItor;
+        threadIter->join();
       }
     }
     threadList_.clear();
@@ -46,7 +72,7 @@ namespace dawn
     if (LF_stackNode != nullptr)
     {
       taskNode = std::move(LF_stackNode->elementVal_);
-      --taskNumber_;
+      taskNumber_.fetch_sub(1, std::memory_order_release);
       ///@todo optimize to smart pointer
       delete LF_stackNode;
       return PROCESS_SUCCESS;
@@ -61,22 +87,21 @@ namespace dawn
       std::unique_lock<std::mutex> stackLock(queueMutex_);
       // avoid spurious wakeup
       threadCond_.wait(stackLock, [this]() {
-        if ((taskNumber_ > 0 && should_wakeup_.load() == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+        if ((taskNumber_.load(std::memory_order_acquire) > 0 && should_wakeup_.load(std::memory_order_acquire) == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
         {
           return true;
         }
         return false;
         });
-      if (taskNumber_ == 1)
+      if (taskNumber_.load(std::memory_order_acquire) == 1)
       {
-        should_wakeup_ = false;
+        should_wakeup_.store(false, std::memory_order_release);
       }
       stackLock.unlock();
-
       funcWrapper taskNode;
       if (runThreadFlag_ != ENUM_THREAD_STATUS::EXIT)
       {
-        for (; taskNumber_ != 0;)
+        for (; taskNumber_.load(std::memory_order_acquire) != 0;)
         {
           if (popWorkQueue(taskNode) == PROCESS_SUCCESS)
           {
@@ -107,7 +132,7 @@ namespace dawn
     }
   }
 
-  void threadPoolManager::threadPoolDestory()
+  void threadPoolManager::threadPoolDestroy()
   {
     for (auto &it : spyThreadPoolGroup_)
     {
