@@ -60,13 +60,13 @@ namespace dawn
     {
       std::unique_lock<std::mutex> stackLock(queueMutex_);
       // avoid spurious wakeup
-      threadCond_.wait(stackLock, [this]()
-                       {
-                if((taskNumber_ > 0 && should_wakeup_.load() == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
-                {
-                    return true;
-                }
-                return false; });
+      threadCond_.wait(stackLock, [this]() {
+        if ((taskNumber_ > 0 && should_wakeup_.load() == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+        {
+          return true;
+        }
+        return false;
+        });
       if (taskNumber_ == 1)
       {
         should_wakeup_ = false;
