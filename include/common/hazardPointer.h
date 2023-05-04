@@ -156,7 +156,7 @@ namespace dawn
   }
 
   template <typename T>
-  hazardPointerContainer<T> *hazardPointerQueue<T>::getThreadLocalContainer()
+  hazardPointerContainer<T>* hazardPointerQueue<T>::getThreadLocalContainer()
   {
     thread_local registerThreadToQueue<T> registerContainer(this->getHeader());
     return registerContainer.localContainer_;
@@ -178,8 +178,8 @@ namespace dawn
   bool hazardPointerQueue<T>::findConflictPointer(T value)
   {
     for (auto containerIndex = this->getHeader()->next_.load(std::memory_order_acquire);
-         containerIndex != nullptr;
-         containerIndex = containerIndex->next_)
+      containerIndex != nullptr;
+      containerIndex = containerIndex->next_)
     {
       if (containerIndex->thread_id_ != std::this_thread::get_id() && containerIndex->value_.load(std::memory_order_acquire) == value)
       {

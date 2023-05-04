@@ -8,14 +8,22 @@
 #include "setLogger.h"
 namespace dawn
 {
-  const int MIN_MEM_BLOCK_TYPE = 7;
-  const int MAX_MEM_BLOCK_TYPE = 11;
-  const int MIN_MEM_BLOCK = 1 << MIN_MEM_BLOCK_TYPE; // 128byte, satisfy to size of cache line buff.
-  const int MAX_MEM_BLOCK = 1 << MAX_MEM_BLOCK_TYPE; // 2048byte, satisfy to udp mtu.
+  //BASE block size is 128byte which is satisfied with multiple of cache line buffer.
+  constexpr const int BASE_BLOCK_BIT_POSITION = 7;
+  constexpr const int BASE_BLOCK_SIZE = 1 << BASE_BLOCK_BIT_POSITION;
 
-  const int TOTAL_MEM_SIZE = (128 << 20); // total size of each type blocks is 128M byte; 
+  //Max block size is 2048byte which is satisfied with udp mtu.
+  constexpr const int MAX_MULTIPLE = 16;
+  constexpr const int MAX_MEM_BLOCK_SIZE = BASE_BLOCK_SIZE * MAX_MULTIPLE;
+#define BLOCK_SIZE(BLOCK_TYPE) ((BLOCK_TYPE) * BASE_BLOCK_SIZE + BASE_BLOCK_SIZE)
 
-#define BLOCK_SIZE(BLOCK_TYPE) 1 << BLOCK_TYPE
+  constexpr const int SEQUENCE_BASE_NUM = 512;
+  constexpr const int SEQUENCE_RATIO = 1024;
+  constexpr const int MEM_POOL_SUPPORT_THREAD_NUM = 64;
+  constexpr const int EACH_THREAD_SEQUENCE_RATIO = SEQUENCE_RATIO / MEM_POOL_SUPPORT_THREAD_NUM;
+  static  constexpr const arithmeticSequenceDec<int, MAX_MULTIPLE, 512, SEQUENCE_RATIO> EACH_BLOCK_TOTAL_NUM{};
+
+#define GET_MEM_QUEUE_MASK(size)  ((size + BASE_BLOCK_SIZE - 1) / BASE_BLOCK_SIZE - 1)
 
 #define GET_DATA(node) node->memoryHead_;
 
@@ -30,35 +38,35 @@ namespace dawn
   template<typename T>
   int getMemBlockType(T* memHead);
 
-  /// @brief allocate memory api for user
-  /// @param requestMemSize 
-  /// @return 
-  void* allocMem(const int requestMemSize);
-
   class memoryPool final
   {
     /**
      * @brief usage: init() -> lowLevelAllocMem() -> lowLevelFreeMem()
      *
      */
-  public:
+    public:
     memoryPool();
     ~memoryPool();
     void init();
-    memoryNode_t *allocMemBlock(const int requestMemSize);
+    memoryNode_t* allocMemBlock(const int requestMemSize);
+
     bool freeMemBlock(memoryNode_t *releaseMemBlock);
 
-  private:
-    lockFreeStack<memoryNode_t *> memoryStoreQueue_[MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1];
+    LF_node_t<memoryNode_t *>* allocMemBlockWithContainer(const int requestMemSize);
+
+    bool freeMemBlockWithContainer(LF_node_t<memoryNode_t *> *releaseMemBlock);
+
+    bool freeEmptyContainer(LF_node_t<memoryNode_t *> *releaseContainer);
+
+    private:
+    lockFreeStack<memoryNode_t *> memoryStoreQueue_[MAX_MULTIPLE];
     lockFreeStack<memoryNode_t *> storeEmptyLFQueue_;
     std::list<void *> allCreateMem_;
   };
 
   class threadLocalMemoryPool final
   {
-
-#define MEM_TYPE_TO_QUEUE_INDEX(type)  (type) - MIN_MEM_BLOCK_TYPE
-  public:
+    public:
     threadLocalMemoryPool();
     ///@todo implement this
     ~threadLocalMemoryPool();
@@ -71,9 +79,9 @@ namespace dawn
     template<typename T>
     bool TL_freeMem(T* memBlock)
     {
-      auto blockType = getMemBlockType(memBlock);
-      incWaterMark(blockType);
-      return recycleMemBlockToQueue(memBlock);
+      auto memHead = reinterpret_cast<memoryNode_t*>(reinterpret_cast<char*>(memBlock) - 1);
+      incWaterMark(memHead->memoryBlockType_);
+      return recycleMemBlockToQueue(memHead, memHead->memoryBlockType_);
     }
 
     bool incWaterMark(int blockType);
@@ -82,29 +90,29 @@ namespace dawn
 
     void* getMemBlockFromQueue(int blockType);
 
-    template<typename T>
-    bool recycleMemBlockToQueue(T* memBlock)
-    {
-      auto blockType = getMemBlockType(memBlock);
-      auto queueIndex = MEM_TYPE_TO_QUEUE_INDEX(blockType);
-      memBlockQueue_[queueIndex][++watermarkIndex_[queueIndex]] = memBlock;
-      return PROCESS_SUCCESS;
-    }
+    bool recycleMemBlockToQueue(memoryNode_t* memBlock, int blockType);
 
-  private:
-    ///@warning May be is incompatible with other compilers.There is gcc 9.4
-    static constexpr geometricSequenceDec<int, MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1, 200, 2> highWaterMark_{};
-    ///@warning May be is incompatible with other compilers.There is gcc 9.4
-    static constexpr geometricSequenceDec<int, MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1, 100, 2> lowWaterMark_{};
+    private:
+    ///@warning May be this initialization is incompatible with other compilers.There is gcc 9.4
+    static constexpr arithmeticSequenceDec<int, MAX_MULTIPLE, 30, EACH_THREAD_SEQUENCE_RATIO> highWaterMark_{};
+    ///@warning May be this initialization is incompatible with other compilers.There is gcc 9.4
+    static constexpr arithmeticSequenceDec<int, MAX_MULTIPLE, 10, 10> lowWaterMark_{};
 
     /// @brief the number of each type is at least the number added max high water mark and max low water mark
-    void* memBlockQueue_[MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1]\
-      [threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0]];
+    LF_node_t<memoryNode_t *>* memBlockList_[MAX_MULTIPLE];
 
-    int watermarkIndex_[MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1];
+    LF_node_t<memoryNode_t *>* remainMemBlockContainerList_;
+
+    int watermarkIndex_[MAX_MULTIPLE];
   };
 
-  void* lowLevelAllocMem(const int requestMemSize);
+  /// @brief Allocate memory with container from final memory pool
+  /// @param requestMemSize 
+  /// @return memory block with container
+  inline LF_node_t<memoryNode_t *>* lowLevelAllocMem(const int requestMemSize)
+  {
+    return singleton<dawn::memoryPool>::getInstance()->allocMemBlockWithContainer(requestMemSize);
+  }
 
   template<typename T>
   int getMemBlockType(T* memHead)
@@ -114,23 +122,48 @@ namespace dawn
     return releaseMemNodeHeader->memoryBlockType_;
   }
 
+  inline bool lowLevelFreeEmptyContainer(LF_node_t<memoryNode_t *> *releaseContainer)
+  {
+    assert(releaseContainer != nullptr && "free a nullptr container");
+    return singleton<dawn::memoryPool>::getInstance()->freeEmptyContainer(releaseContainer);
+  }
+
+  /// @brief free memory to final memory pool
+  /// @tparam T 
+  /// @param memHead default is memory block without container.
+  /// @return 
   template<typename T>
-  bool lowLevelFreeMem(T* memHead)
+  inline bool lowLevelFreeMem(T* memHead)
   {
     assert(memHead != nullptr && "free a nullptr");
     memoryNode_t* releaseMemNodeHeader = reinterpret_cast<memoryNode_t*>(reinterpret_cast<char*>(memHead) - 1);
     return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemNodeHeader);
   }
 
+  inline bool lowLevelFreeMem(LF_node_t<memoryNode_t *> *memContainer)
+  {
+    assert((memContainer != nullptr || memContainer->elementVal_ != nullptr) && "free a nullptr container");
+    return singleton<dawn::memoryPool>::getInstance()->freeMemBlockWithContainer(memContainer);
+  }
+
   /// @brief free memory to final memory pool
   /// @param releaseMemBlock 
   /// @return 
-  bool lowLevelFreeMem(memoryNode_t *releaseMemBlock);
+  inline bool lowLevelFreeMem(memoryNode_t *releaseMemBlock)
+  {
+    assert(releaseMemBlock != nullptr && "free a nullptr");
+    return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemBlock);
+  }
 
   /// @brief free memory to final memory pool
-  /// @param memHead 
+  /// @param memHead default memHead is a memory block without container
   /// @return 
-  bool lowLevelFreeMem(void *memHead);
+  inline bool lowLevelFreeMem(void *memHead)
+  {
+    assert(memHead != nullptr && "free a nullptr");
+    memoryNode_t* releaseMemNodeHeader = reinterpret_cast<memoryNode_t*>(reinterpret_cast<char*>(memHead) - 1);
+    return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemNodeHeader);
+  }
 
   /// @brief Used to initialize final memory pool.Remember use it before request to allocate memory.
   /// @note It can be called one more time, but the memory pool will be initialized only one time.
@@ -148,8 +181,15 @@ namespace dawn
   bool freeMem(T* memHead)
   {
     assert(memHead != nullptr && "free a nullptr");
-    auto& memoryPool = getThreadLocalPool();
-    return memoryPool.TL_freeMem(memHead);
+    return getThreadLocalPool().TL_freeMem(memHead);
+  }
+
+  /// @brief allocate memory api for user
+  /// @param requestMemSize 
+  /// @return 
+  inline void* allocMem(const int requestMemSize)
+  {
+    return getThreadLocalPool().TL_allocMem(requestMemSize);
   }
 }
 

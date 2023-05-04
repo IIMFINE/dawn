@@ -17,17 +17,17 @@ namespace dawn
   {
     memoryNode_t *mallocMemory = nullptr;
     LF_node_t<memoryNode_t *> *mallocLFNode = nullptr;
-    for (int i = MIN_MEM_BLOCK_TYPE; i <= MAX_MEM_BLOCK_TYPE; ++i)
+    for (int i = 0; i < MAX_MULTIPLE; ++i)
     {
-      int memBlockSize = 1 << i;
-      int totalMemBlockNum = TOTAL_MEM_SIZE / memBlockSize;
-      mallocMemory = (memoryNode_t *)malloc(TOTAL_MEM_SIZE + totalMemBlockNum * (sizeof(memoryNode_t)));
+      int memBlockSize = BASE_BLOCK_SIZE * (i + 1);
+      int totalMemBlockNum = EACH_BLOCK_TOTAL_NUM.array[i];
+      mallocMemory = (memoryNode_t *)malloc(totalMemBlockNum * (sizeof(memoryNode_t) + memBlockSize));
       mallocLFNode = new LF_node_t<memoryNode_t *>[totalMemBlockNum];
 
       allCreateMem_.push_back((void *)mallocMemory);
       allCreateMem_.push_back((void *)mallocLFNode);
 
-      memset(mallocMemory, 0x0, TOTAL_MEM_SIZE);
+      memset(mallocMemory, 0x0, (sizeof(memoryNode_t) + memBlockSize));
       if (mallocMemory != nullptr && mallocLFNode != nullptr)
       {
         char *tempMallocMemory = reinterpret_cast<char *>(mallocMemory);
@@ -39,7 +39,7 @@ namespace dawn
           mallocLFNode[j].next_ = &mallocLFNode[j + 1];
         }
         mallocLFNode[totalMemBlockNum - 1].next_ = nullptr;
-        memoryStoreQueue_[i - MIN_MEM_BLOCK_TYPE].init(mallocLFNode);
+        memoryStoreQueue_[i].init(mallocLFNode);
       }
       LOG_INFO("init memory pool type {} block num {}", i, totalMemBlockNum);
     }
@@ -54,65 +54,72 @@ namespace dawn
     allCreateMem_.clear();
   }
 
-  memoryNode_t *memoryPool::allocMemBlock(const int requestMemSize)
+  memoryNode_t* memoryPool::allocMemBlock(const int requestMemSize)
   {
-    if (requestMemSize <= 0)
+    assert(requestMemSize > 0 && "error: requestMemSize is less than 0");
+
+    int memMask = GET_MEM_QUEUE_MASK(requestMemSize);
+
+    LF_node_t<memoryNode_t *> *memNodeContainer = memoryStoreQueue_[memMask].popNodeWithHazard();
+
+    if (memNodeContainer == nullptr)
     {
+      LOG_WARN("alloc fail {} {}", memMask, requestMemSize);
       return nullptr;
     }
-
-    if (requestMemSize > MAX_MEM_BLOCK)
-    {
-      LOG_WARN("error: request to alloc is too large {}", requestMemSize);
-      return nullptr;
-    }
-    int countRequestMemType = 0;
-    if (requestMemSize <= MIN_MEM_BLOCK)
-    {
-      countRequestMemType = MIN_MEM_BLOCK_TYPE;
-    }
-    else
-    {
-      countRequestMemType = getTopBitPosition((uint32_t)requestMemSize);
-      if (((requestMemSize - 1) & requestMemSize) != 0)
-      {
-        countRequestMemType += 1;
-      }
-    }
-
-    LF_node_t<memoryNode_t *> *memNodeContain = memoryStoreQueue_[countRequestMemType - MIN_MEM_BLOCK_TYPE].popNodeWithHazard();
-
-    if (memNodeContain == nullptr)
-    {
-      LOG_WARN("alloc fail {} {}", countRequestMemType, requestMemSize);
-      return nullptr;
-    }
-    memNodeContain->next_ = nullptr;
-    memoryNode_t *memNode = memNodeContain->elementVal_;
-    memNodeContain->elementVal_ = nullptr;
-    storeEmptyLFQueue_.pushNode(memNodeContain);
+    memNodeContainer->next_ = nullptr;
+    memoryNode_t *memNode = memNodeContainer->elementVal_;
+    memNodeContainer->elementVal_ = nullptr;
+    storeEmptyLFQueue_.pushNode(memNodeContainer);
     return memNode;
   }
 
   bool memoryPool::freeMemBlock(memoryNode_t *releaseMemBlock)
   {
-    if (releaseMemBlock == nullptr)
-    {
-      LOG_ERROR("error: ask to release memory block is nullptr ");
-      return PROCESS_FAIL;
-    }
+    assert(releaseMemBlock != nullptr && "error: ask to release memory block is nullptr ");
+
     int memBlockType = releaseMemBlock->memoryBlockType_;
     LF_node_t<memoryNode_t *> *availableContain = nullptr;
     availableContain = storeEmptyLFQueue_.popNodeWithHazard();
 
-    if (availableContain == nullptr)
-    {
-      LOG_WARN("warn: no enough contain to save memory block and be care about some error happen");
-      availableContain = new LF_node_t<memoryNode_t *>;
-    }
+    assert(availableContain != nullptr && "error: no enough contain to save memory block and be care about some error happen");
 
     availableContain->elementVal_ = releaseMemBlock;
-    memoryStoreQueue_[memBlockType - MIN_MEM_BLOCK_TYPE].pushNode(availableContain);
+    memoryStoreQueue_[memBlockType].pushNode(availableContain);
+    return PROCESS_SUCCESS;
+  }
+
+  LF_node_t<memoryNode_t *>* memoryPool::allocMemBlockWithContainer(const int requestMemSize)
+  {
+    assert(requestMemSize > 0 && "error: requestMemSize is less than 0");
+
+    int memMask = GET_MEM_QUEUE_MASK(requestMemSize);
+
+    LF_node_t<memoryNode_t *> *memNodeContainer = memoryStoreQueue_[memMask].popNodeWithHazard();
+
+    if (memNodeContainer == nullptr)
+    {
+      LOG_WARN("alloc fail {} {}", memMask, requestMemSize);
+      return nullptr;
+    }
+    memNodeContainer->next_ = nullptr;
+    return memNodeContainer;
+  }
+
+  bool memoryPool::freeMemBlockWithContainer(LF_node_t<memoryNode_t *> *releaseMemBlock)
+  {
+    assert(releaseMemBlock != nullptr && "error: ask to release memory block is nullptr ");
+
+    int memBlockType = releaseMemBlock->elementVal_->memoryBlockType_;
+    memoryStoreQueue_[memBlockType].pushNode(releaseMemBlock);
+    return PROCESS_SUCCESS;
+  }
+
+  bool memoryPool::freeEmptyContainer(LF_node_t<memoryNode_t *> *releaseContainer)
+  {
+    assert(releaseContainer != nullptr && "error: ask to release memory container is nullptr ");
+
+    storeEmptyLFQueue_.pushNode(releaseContainer);
     return PROCESS_SUCCESS;
   }
 
@@ -126,23 +133,39 @@ namespace dawn
     /// @note call for safety
     memPoolInit();
 
-    for (int i = 0; i < MAX_MEM_BLOCK_TYPE - MIN_MEM_BLOCK_TYPE + 1; i++)
+    for (int i = 0; i < MAX_MULTIPLE; i++)
     {
-      auto block_size = BLOCK_SIZE((i + MIN_MEM_BLOCK_TYPE));
+      auto block_size = BLOCK_SIZE(i);
       int j = 0;
       for (j = 0;j <= highWaterMark_.array[i]; j++)
       {
-        memBlockQueue_[i][j] = lowLevelAllocMem(block_size);
-        if (memBlockQueue_[i][j] == nullptr)
+        auto blockContainer = lowLevelAllocMem(block_size);
+        if (blockContainer != nullptr)
         {
-          LOG_WARN("thread local memory pool can not finish initialize, alloc mem type {}", i);
+          if (memBlockList_[i] == nullptr)
+          {
+            memBlockList_[i] = blockContainer;
+          }
+          else
+          {
+            blockContainer->next_ = memBlockList_[i];
+            memBlockList_[i] = blockContainer;
+          }
+        }
+        else
+        {
+          j--;
           break;
         }
       }
 
-      if (j > 0)
+      if (j > highWaterMark_.array[i])
       {
-        watermarkIndex_[i] = (--j);
+        watermarkIndex_[i] = j - 1;
+      }
+      else
+      {
+        watermarkIndex_[i] = j;
       }
     }
     return PROCESS_SUCCESS;
@@ -150,160 +173,131 @@ namespace dawn
 
   threadLocalMemoryPool::~threadLocalMemoryPool()
   {
-    for (int i = MIN_MEM_BLOCK_TYPE; i <= MAX_MEM_BLOCK_TYPE;i++)
+    for (int i = 0;i < MAX_MULTIPLE;i++)
     {
-      auto queueIndex = MEM_TYPE_TO_QUEUE_INDEX(i);
-      for (int j = watermarkIndex_[queueIndex];j >= 0;j--)
+      for (auto memBlock = memBlockList_[i]; memBlock != nullptr;)
       {
-        lowLevelFreeMem(memBlockQueue_[queueIndex][j]);
+        auto nextMemBlock = memBlock->next_;
+        lowLevelFreeMem(memBlock);
+        memBlock = nextMemBlock;
       }
+    }
+    for (auto container = remainMemBlockContainerList_; container != nullptr;)
+    {
+      auto nextContainer = container->next_;
+      lowLevelFreeEmptyContainer(container);
+      container = nextContainer;
     }
   }
 
   void* threadLocalMemoryPool::TL_allocMem(const int requestMemSize)
   {
     assert(requestMemSize > 0 && "can not request non positive size memory");
+    int memMask = GET_MEM_QUEUE_MASK(requestMemSize);
 
-    if (requestMemSize > MAX_MEM_BLOCK)
+    ///@note Use branch prediction
+    if (memMask < MAX_MULTIPLE)
+    {
+      decWaterMark(memMask);
+      auto memoryPtr = getMemBlockFromQueue(memMask);
+      return memoryPtr;
+    }
+    else
     {
       LOG_WARN("error: request to alloc is too large {}", requestMemSize);
       return nullptr;
     }
-
-    int countRequestMemType = 0;
-    if (requestMemSize <= MIN_MEM_BLOCK)
-    {
-      countRequestMemType = MIN_MEM_BLOCK_TYPE;
-    }
-    else
-    {
-      countRequestMemType = getTopBitPosition((uint32_t)requestMemSize);
-      ///@note if requestMemSize is bigger than 2 to the power of countRequestMemType, countRequestMemType will add 1
-      if (((requestMemSize - 1) & requestMemSize) != 0)
-      {
-        ++countRequestMemType;
-      }
-    }
-    LOG_DEBUG("alloc memory type {}", countRequestMemType);
-    decWaterMark(countRequestMemType);
-    auto memoryPtr = getMemBlockFromQueue(countRequestMemType);
-    if (memoryPtr == nullptr)
-    {
-      throw std::runtime_error("dawn: alloc a nullptr memory ptr");
-    }
-    return memoryPtr;
+    return nullptr;
   }
 
   void* threadLocalMemoryPool::getMemBlockFromQueue(int blockType)
   {
-    auto queueIndex = MEM_TYPE_TO_QUEUE_INDEX(blockType);
-    return memBlockQueue_[queueIndex][watermarkIndex_[queueIndex]--];
+    --watermarkIndex_[blockType];
+    auto memContainer = memBlockList_[blockType];
+    assert(memContainer != nullptr && "error: get memory block from queue is nullptr");
+    memBlockList_[blockType] = memContainer->next_;
+    auto memBlock = memContainer->elementVal_;
+    memContainer->elementVal_ = nullptr;
+    memContainer->next_ = remainMemBlockContainerList_;
+    remainMemBlockContainerList_ = memContainer;
+    return memBlock->memoryHead_;
+  }
+
+  bool threadLocalMemoryPool::recycleMemBlockToQueue(memoryNode_t* memBlock, int blockType)
+  {
+    watermarkIndex_[blockType]++;
+    if (remainMemBlockContainerList_ != nullptr)
+    {
+      auto emptyContainer = remainMemBlockContainerList_;
+      remainMemBlockContainerList_ = remainMemBlockContainerList_->next_;
+      emptyContainer->elementVal_ = memBlock;
+      emptyContainer->next_ = memBlockList_[blockType];
+      memBlockList_[blockType] = emptyContainer;
+      return PROCESS_SUCCESS;
+    }
+    else
+    {
+      auto emptyContainer = new LF_node_t<memoryNode_t *>;
+      emptyContainer->elementVal_ = memBlock;
+      emptyContainer->next_ = memBlockList_[blockType];
+      memBlockList_[blockType] = emptyContainer;
+      return PROCESS_SUCCESS;
+    }
   }
 
   bool threadLocalMemoryPool::incWaterMark(int blockType)
   {
-    auto queueIndex = MEM_TYPE_TO_QUEUE_INDEX(blockType);
-    auto waterMarkIndex = watermarkIndex_[queueIndex];
+    auto waterMarkIndex = watermarkIndex_[blockType];
 
-    if (waterMarkIndex < threadLocalMemoryPool::highWaterMark_.array[queueIndex])
+    if (waterMarkIndex < threadLocalMemoryPool::highWaterMark_.array[blockType] + threadLocalMemoryPool::lowWaterMark_.array[blockType])
     {
       return PROCESS_SUCCESS;
     }
 
-    if (waterMarkIndex > threadLocalMemoryPool::highWaterMark_.array[queueIndex]
-      && waterMarkIndex < (threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0] - 1))
+    for (int i = waterMarkIndex; i >= threadLocalMemoryPool::highWaterMark_.array[blockType]; i--)
     {
-      for (int i = waterMarkIndex; i >= threadLocalMemoryPool::highWaterMark_.array[queueIndex]; i--)
+      auto memContainer = memBlockList_[blockType];
+      memBlockList_[blockType] = memContainer->next_;
+      memContainer->next_ = nullptr;
+
+      if (lowLevelFreeMem(memContainer) == PROCESS_FAIL)
       {
-        auto memBlock = memBlockQueue_[queueIndex][watermarkIndex_[queueIndex]];
-        if (lowLevelFreeMem(memBlock) == PROCESS_FAIL)
-        {
-          LOG_WARN("can not decrease memory block in thread local pool, {} type", blockType);
-          return PROCESS_FAIL;
-        }
-        else
-        {
-          --watermarkIndex_[queueIndex];
-        }
+        LOG_WARN("can not decrease memory block in thread local pool, {} type", blockType);
+        return PROCESS_FAIL;
+      }
+      else
+      {
+        --watermarkIndex_[blockType];
       }
     }
-    else if (waterMarkIndex >= (threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0]))
-    {
-      throw std::runtime_error("dawn: thread local memory pool is overflow");
-    }
-    else if (waterMarkIndex == (threadLocalMemoryPool::highWaterMark_.array[0] + threadLocalMemoryPool::lowWaterMark_.array[0] - 1))
-    {
-      bool waterChangeFlag = false;
-      for (int i = waterMarkIndex; i > threadLocalMemoryPool::highWaterMark_.array[queueIndex]; i--)
-      {
-        auto memBlock = memBlockQueue_[queueIndex][watermarkIndex_[queueIndex]];
-        if (lowLevelFreeMem(memBlock) == PROCESS_FAIL)
-        {
-          LOG_WARN("can not free memory");
-          if (waterChangeFlag == false)
-          {
-            throw std::runtime_error("dawn: thread local memory pool will be overflow");
-          }
-          return PROCESS_FAIL;
-        }
-        else
-        {
-          waterChangeFlag = true;
-          --watermarkIndex_[queueIndex];
-        }
-      }
-    }
+
     return PROCESS_SUCCESS;
   }
 
   bool threadLocalMemoryPool::decWaterMark(int blockType)
   {
-    auto queueIndex = MEM_TYPE_TO_QUEUE_INDEX(blockType);
-    auto waterMarkIndex = watermarkIndex_[queueIndex];
+    auto waterMarkIndex = watermarkIndex_[blockType];
 
-    if (waterMarkIndex > threadLocalMemoryPool::lowWaterMark_.array[queueIndex])
+    if (waterMarkIndex >= threadLocalMemoryPool::lowWaterMark_.array[blockType])
     {
       return PROCESS_SUCCESS;
     }
 
-    if (waterMarkIndex < threadLocalMemoryPool::lowWaterMark_.array[queueIndex] && waterMarkIndex > 0)
+    if (waterMarkIndex < threadLocalMemoryPool::lowWaterMark_.array[blockType] && waterMarkIndex >= 0)
     {
-      for (int i = waterMarkIndex; i <= threadLocalMemoryPool::lowWaterMark_.array[queueIndex]; i++)
+      //Increase the number of memory blocks in the queue
+      for (int i = waterMarkIndex; i < threadLocalMemoryPool::lowWaterMark_.array[blockType]; i++)
       {
-        if (auto memBlock = lowLevelAllocMem(blockType); memBlock != nullptr)
+        if (auto memContainer = lowLevelAllocMem(BLOCK_SIZE(blockType)); memContainer != nullptr)
         {
-          ++watermarkIndex_[queueIndex];
-          memBlockQueue_[queueIndex][watermarkIndex_[queueIndex]] = memBlock;
+          ++watermarkIndex_[blockType];
+          memContainer->next_ = memBlockList_[blockType];
+          memBlockList_[blockType] = memContainer;
         }
         else
         {
-          LOG_WARN("can not supplement thread local memory {} type", blockType);
+          LOG_WARN("can not supplement thread local memory {} size", BLOCK_SIZE(blockType));
           return PROCESS_FAIL;
-        }
-      }
-    }
-    else if (waterMarkIndex == 0)
-    {
-      bool waterChangeFlag = false;
-      for (int i = waterMarkIndex; i <= threadLocalMemoryPool::lowWaterMark_.array[queueIndex]; i++)
-      {
-        if (auto memBlock = lowLevelAllocMem(blockType); memBlock != nullptr)
-        {
-          ++watermarkIndex_[queueIndex];
-          memBlockQueue_[queueIndex][watermarkIndex_[queueIndex]] = memBlock;
-          waterChangeFlag = true;
-        }
-        else
-        {
-          if (waterChangeFlag == false)
-          {
-            LOG_WARN("can not supplement thread local memory {} type", blockType);
-            throw std::runtime_error("dawn: there will be a breakdown in thread local memory");
-          }
-          else
-          {
-            return PROCESS_FAIL;
-          }
         }
       }
     }
@@ -313,7 +307,6 @@ namespace dawn
     }
     return PROCESS_SUCCESS;
   }
-
 
   void memPoolInit()
   {
@@ -325,37 +318,9 @@ namespace dawn
     (void)init_bait;
   }
 
-  void* lowLevelAllocMem(const int requestMemSize)
-  {
-    auto memoryNode = singleton<dawn::memoryPool>::getInstance()->allocMemBlock(requestMemSize);
-    return reinterpret_cast<void*>(memoryNode->memoryHead_);
-  }
-
-  bool lowLevelFreeMem(memoryNode_t *releaseMemBlock)
-  {
-    if (releaseMemBlock == nullptr)
-    {
-      throw std::runtime_error("dawn: try to release nullptr");
-    }
-    return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemBlock);
-  }
-
-  bool lowLevelFreeMem(void *memHead)
-  {
-    assert(memHead != nullptr && "free a nullptr");
-    memoryNode_t* releaseMemNodeHeader = reinterpret_cast<memoryNode_t*>(reinterpret_cast<char*>(memHead) - 1);
-    return singleton<dawn::memoryPool>::getInstance()->freeMemBlock(releaseMemNodeHeader);
-  }
-
   threadLocalMemoryPool& getThreadLocalPool()
   {
     static thread_local threadLocalMemoryPool TL_memoryPool;
     return TL_memoryPool;
-  }
-
-  void* allocMem(const int requestMemSize)
-  {
-    auto& memoryPool = getThreadLocalPool();
-    return memoryPool.TL_allocMem(requestMemSize);
   }
 }
