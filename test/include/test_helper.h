@@ -39,8 +39,6 @@ namespace dawn
     std::chrono::time_point<high_resolution_clock> endTime_;
     static std::map<std::string, unsigned int> timeSpan_;
   };
-  std::map<std::string, unsigned int> timeCounter::timeSpan_{};
-
 
   inline int getTopBitPosition_2(uint32_t number)
   {

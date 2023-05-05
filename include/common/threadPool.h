@@ -32,9 +32,15 @@ namespace dawn
       std::vector<funcWrapper> workQueue;
     };
 
-    threadPool();
-    ~threadPool() = default;
+    threadPool() = default;
+    threadPool(const threadPool &) = delete;
+    threadPool &operator=(const threadPool &) = delete;
+
+    ~threadPool();
     void init(uint32_t workThreadNum = 1);
+    void addWorkThread(uint32_t workThreadNum = 1);
+
+    void workThreadMaintainer();
 
     template <typename FUNC_T>
     void eventDriverThread(FUNC_T returnCb)
@@ -46,10 +52,6 @@ namespace dawn
           if (pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
           {
             LOG_ERROR("push work task to queue wrong");
-          }
-          else
-          {
-            threadCond_.notify_one();
           }
         }
         else if (runThreadFlag_ == ENUM_THREAD_STATUS::STOP)
@@ -65,9 +67,10 @@ namespace dawn
     }
 
     template <typename FUNC_T>
-    void setEventThread(FUNC_T returnCb)
+    void setEventThread(FUNC_T&& returnCb)
     {
-      threadList_.push_back(new std::thread(&threadPool::eventDriverThread<FUNC_T>, this, returnCb));
+      threadList_.emplace_back(\
+        std::make_unique<std::thread>(std::bind(&threadPool::eventDriverThread<FUNC_T>, this, std::forward<FUNC_T>(returnCb))));
     }
 
     template <typename FUNC_T>
@@ -81,8 +84,9 @@ namespace dawn
     {
       auto p_LF_node = new LF_node_t<funcWrapper>(std::forward<T>(workTask));
       taskStack_.pushNode(p_LF_node);
-      should_wakeup_ = true;
-      ++taskNumber_;
+      should_wakeup_.store(true, std::memory_order_release);
+      taskNumber_.fetch_add(1, std::memory_order_release);
+      threadCond_.notify_one();
       return PROCESS_SUCCESS;
     }
 
@@ -103,12 +107,12 @@ namespace dawn
     private:
     volatile ENUM_THREAD_STATUS runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
     std::mutex queueMutex_;
-    // a proximity number to identify the amount of tasks.
-    volatile int taskNumber_;
-    std::atomic_bool should_wakeup_;
+    std::mutex threadListMutex_;
+    std::atomic_int taskNumber_ = 0;
+    std::atomic_bool should_wakeup_ = false;
     lockFreeStack<funcWrapper> taskStack_;
     std::condition_variable threadCond_;
-    std::vector<std::thread *> threadList_;
+    std::vector<std::unique_ptr<std::thread>> threadList_;
   };
 
   class threadPoolManager
@@ -119,17 +123,17 @@ namespace dawn
     template <typename... executeTask_t>
     void createThreadPool(int workThreadNum = 1, executeTask_t &&...executeTasks)
     {
-      std::unique_ptr<threadPool> uniPtr_spyThreadPool(new threadPool());
-      uniPtr_spyThreadPool->init(workThreadNum);
+      auto spyThreadPool_ptr = std::make_unique<threadPool>();
+      spyThreadPool_ptr->init(workThreadNum);
       if (sizeof...(executeTasks) != 0)
       {
-        std::initializer_list<int>{(uniPtr_spyThreadPool->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
+        std::initializer_list<int>{(spyThreadPool_ptr->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
       }
-      spyThreadPoolGroup_.push_back(std::move(uniPtr_spyThreadPool));
+      spyThreadPoolGroup_.push_back(std::move(spyThreadPool_ptr));
     }
     void threadPoolExecute();
     void threadPoolHalt();
-    void threadPoolDestory();
+    void threadPoolDestroy();
 
     private:
     std::vector<std::unique_ptr<threadPool>> spyThreadPoolGroup_;
