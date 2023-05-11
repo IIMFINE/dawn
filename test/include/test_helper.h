@@ -4,6 +4,7 @@
 #include <map>
 
 #include "common/setLogger.h"
+#include <x86intrin.h>
 
 namespace dawn
 {
@@ -38,6 +39,38 @@ namespace dawn
     std::chrono::time_point<high_resolution_clock> startTime_;
     std::chrono::time_point<high_resolution_clock> endTime_;
     static std::map<std::string, unsigned int> timeSpan_;
+  };
+
+  struct cyclesCounter final
+  {
+    cyclesCounter(std::string_view index)
+    {
+      timeIndex_ = index;
+      startTime_ = __rdtsc();
+    }
+
+    ~cyclesCounter()
+    {
+      endTime_ = __rdtsc();
+      cyclesCounter::timeSpan_[timeIndex_] = endTime_ - startTime_;
+    }
+
+    static unsigned long getTimeSpan(std::string_view index)
+    {
+      if (auto timeSpanIt = cyclesCounter::timeSpan_.find(static_cast<std::string>(index)); timeSpanIt == cyclesCounter::timeSpan_.end())
+      {
+        throw std::runtime_error("dawn: time counter " + static_cast<std::string>(index) + " doesn't exist");
+      }
+      else
+      {
+        return timeSpanIt->second;
+      }
+    }
+
+    std::string timeIndex_;
+    uint64_t startTime_;
+    uint64_t endTime_;
+    static std::map<std::string, uint64_t> timeSpan_;
   };
 
   inline int getTopBitPosition_2(uint32_t number)

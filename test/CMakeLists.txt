@@ -10,7 +10,7 @@ find_package(GTest CONFIG REQUIRED)
 
 set(ADD_THIRD_PARTY_LIB GTest::gtest)
 
-add_executable(test ${DIR_SRC}/test.cpp ${DIR_SRC}/test_impl.cpp ${DIR_SRC}/test_boost.cpp ${DIR_SRC}/test_comm_func.cpp)
+add_executable(test ${DIR_SRC}/test.cpp ${DIR_SRC}/test_impl.cpp ${DIR_SRC}/test_boost.cpp ${DIR_SRC}/test_comm_func.cpp ${DIR_SRC}/test_benchmark.cpp)
 
 add_dependencies(test common discovery transport)
 

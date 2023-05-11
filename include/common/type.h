@@ -44,43 +44,43 @@ namespace dawn
     }
   };
 
-  /// @brief create a geometric sequence contained increase number
+  /// @brief create a arithmetic sequence contained increase number
   /// @tparam T array type
   /// @tparam TOTAL_NUM size of sequence
   /// @tparam BASE the smallest number in sequence
-  /// @tparam RATIO geometric sequence ratio
+  /// @tparam RATIO arithmetic sequence ratio
   template<typename T, unsigned int TOTAL_NUM, int BASE, int RATIO>
-  struct geometricSequenceInc
+  struct arithmeticSequenceInc
   {
-    constexpr geometricSequenceInc():
+    constexpr arithmeticSequenceInc() :
       array()
     {
       static_assert(TOTAL_NUM > 0, "total number at least is 1");
       array[0] = BASE;
       for (unsigned int i = 1; i < TOTAL_NUM; i++)
       {
-        array[i] = array[i - 1] * RATIO;
+        array[i] = array[i - 1] + RATIO;
       }
     }
     T array[TOTAL_NUM];
   };
 
-  /// @brief create a geometric sequence contained decrease number
+  /// @brief create a arithmetic sequence contained decrease number
   /// @tparam T array type
   /// @tparam TOTAL_NUM size of sequence
   /// @tparam BASE the smallest number in sequence
-  /// @tparam RATIO geometric sequence ratio
+  /// @tparam RATIO arithmetic sequence ratio
   template<typename T, unsigned int TOTAL_NUM, int BASE, int RATIO>
-  struct geometricSequenceDec
+  struct arithmeticSequenceDec
   {
-    constexpr geometricSequenceDec():
+    constexpr arithmeticSequenceDec() :
       array()
     {
       static_assert(TOTAL_NUM > 0, "total number at least is 1");
       array[TOTAL_NUM - 1] = BASE;
       for (unsigned int i = 1; i < TOTAL_NUM; i++)
       {
-        array[TOTAL_NUM - 1 - i] = array[TOTAL_NUM - i] * RATIO;
+        array[TOTAL_NUM - 1 - i] = array[TOTAL_NUM - i] + RATIO;
       }
     }
     T array[TOTAL_NUM];

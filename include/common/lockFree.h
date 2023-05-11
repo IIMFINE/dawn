@@ -54,19 +54,12 @@ namespace dawn
   template <typename T>
   void lockFreeStack<T>::pushNode(LF_node_t<T> *node)
   {
-    if (node != nullptr)
+    assert(node != nullptr && "a null node can be pushed to queue");
+    auto oldHead = LF_queueHead_.load(std::memory_order_acquire);
+    do
     {
-      auto oldHead = LF_queueHead_.load(std::memory_order_acquire);
-      do
-      {
-        node->next_ = oldHead;
-      } while (!LF_queueHead_.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
-    }
-    else
-    {
-      LOG_WARN("a null node can be pushed to queue");
-    }
-    return;
+      node->next_ = oldHead;
+    } while (!LF_queueHead_.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
   }
 
   template <typename T>
