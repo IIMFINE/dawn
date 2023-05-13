@@ -460,24 +460,37 @@ namespace  dawn
   bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
     shmIndexRingBuffer::ringBufferIndexBlockType block;
+    std::function<bool(void)> subscribeLatestMsg_func;
 
-    auto subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
-      bool result = false;
-      if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-      {
-        if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
-        {
-          qosController_ptr_->updateLatestMsg(&block);
-          if (read(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+    switch (qosController_ptr_->getQosType())
+    {
+      case qosCfg::QOS_TYPE::EFFICIENT:
+        subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
+          bool result = false;
+          if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
           {
-            result = true;
+            if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
+            {
+              qosController_ptr_->updateLatestMsg(&block);
+              if (read(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+              {
+                result = true;
+              }
+            }
+            unlockRingBuffer();
           }
-        }
-        unlockRingBuffer();
-      }
-      return result;
-    };
-
+          return result;
+        };
+        break;
+      case qosCfg::QOS_TYPE::RELIABLE:
+        subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
+            
+          return false;
+        };
+        break;
+      default:
+        break;
+    }
     //Try to get the latest index block to taste.
     if (subscribeLatestMsg_func() == true)
     {
