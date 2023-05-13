@@ -3,6 +3,7 @@
 #include <any>
 
 #include "shmTransport.h"
+#include <shared_mutex>
 
 namespace dawn
 {
@@ -14,8 +15,14 @@ namespace dawn
       EFFICIENT
     };
     qosCfg() = default;
-    ~qosCfg() = default;
-    QOS_TYPE qosType = QOS_TYPE::EFFICIENT;
+    virtual ~qosCfg() = default;
+    QOS_TYPE qosType_ = QOS_TYPE::EFFICIENT;
+  };
+
+  struct reliableQosCfg : public qosCfg
+  {
+    reliableQosCfg();
+    virtual ~reliableQosCfg() = default;
   };
 
   struct qosController
@@ -29,6 +36,9 @@ namespace dawn
 
     virtual ~qosController() = default;
     virtual bool initialize(std::any config) = 0;
+    /// @brief Get QoS type from config.
+    /// @return 
+    virtual qosCfg::QOS_TYPE getQosType() = 0;
     /// @brief deliver a message pointer.Using std::any to implement polymorphism.
     /// @param msg message pointer
     /// @return 
@@ -49,12 +59,33 @@ namespace dawn
     /// @param ringBuffer_ 
     /// @return 
     virtual bool initialize(std::any config) override;
+    virtual qosCfg::QOS_TYPE getQosType() override;
     virtual MSG_FRESHNESS tasteMsgType(std::any msg) override;
     virtual bool updateLatestMsg(std::any msg) override;
     private:
+    std::shared_mutex                                  mutex_;
     qosCfg                                            qosCfg_;
     shmIndexRingBuffer::ringBufferIndexBlockType      latestMsg_;
   };
+
+  // struct reliableQosController_shm : public qosController
+  // {
+  //   reliableQosController_shm() = default;
+  //   reliableQosController_shm(std::any config);
+  //   virtual ~reliableQosController_shm() = default;
+  //   /// @brief Deliver config to decide QoS control.
+  //   /// @param ringBuffer_ 
+  //   /// @return 
+  //   virtual bool initialize(std::any config) override;
+  // virtual qosCfg::QOS_TYPE getQosType() override;
+  //   virtual MSG_FRESHNESS tasteMsgType(std::any msg) override;
+  //   virtual bool updateLatestMsg(std::any msg) override;
+  //   private:
+  //   std::shared_mutex                                  mutex_;
+  //   qosCfg                                            qosCfg_;
+  //   shmIndexRingBuffer::ringBufferIndexBlockType      latestMsg_;
+  // };
+
 } //namespace dawn
 
 #endif

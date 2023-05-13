@@ -127,6 +127,9 @@ namespace  dawn
   {
     BI::scoped_lock<BI::interprocess_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
 
+    /// @note Accurate time stamp must be get after locked.
+    indexBlock.timeStamp_ = getTimestamp();
+
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
       // This scenario is ring buffer is initial.
@@ -165,7 +168,7 @@ namespace  dawn
     return PROCESS_SUCCESS;
   }
 
-  bool shmIndexRingBuffer::watchRingBuffer(ringBufferIndexBlockType &indexBlock)
+  bool shmIndexRingBuffer::watchLatestBuffer(ringBufferIndexBlockType &indexBlock)
   {
     BI::scoped_lock<BI::interprocess_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
     ///@note Lock start index prevent other process move start index overlap end index.
@@ -310,12 +313,25 @@ namespace  dawn
   {
     shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr);
     ~shmTransportImpl() = default;
+
+    /// @brief Write data to data space.
+    ///       property: thread safe
+    /// @param write_data
+    /// @param data_len
+    /// @return 
     bool write(const void *write_data, const uint32_t data_len);
-    bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type);
+
+    /// @brief Read data from data space.
+    ///       property: non thread safe
+    /// @param read_data
+    /// @param data_len
+    /// @param block_type
+    /// @return
+    bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type);
     bool wait();
 
     protected:
-    bool publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp);
+    bool publishMsg(uint32_t msgIndex, uint32_t msgSize);
 
     /// @brief Read the latest index block from ring buffer and will lock ring buffer.
     ///        Need to use unlockRingBuffer() to unlock end index of ring buffer.
@@ -326,11 +342,6 @@ namespace  dawn
     /// @brief Unlock end index of ring buffer.
     /// @return
     void unlockRingBuffer();
-
-    /// @brief Get a microsecond timestamp.
-    ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
-    /// @return microsecond timestamp.
-    uint32_t  getTimestamp();
 
     std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size);
 
@@ -374,7 +385,7 @@ namespace  dawn
     return impl_->write(write_data, data_len);
   }
 
-  bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
+  bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
     return impl_->read(read_data, data_len, block_type);
   }
@@ -407,6 +418,8 @@ namespace  dawn
     msgType   *prev_msg = nullptr;
     uint32_t written_len = 0;
     auto wait2writeLen = data_len;
+
+    /// @note Write data to shm
     for (auto msgIndex : msg_vec)
     {
       auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
@@ -433,7 +446,8 @@ namespace  dawn
       }
     }
 
-    if (publishMsg(msg_vec[0], data_len, getTimestamp()) == PROCESS_FAIL)
+    /// @note Publish msg to ring buffer
+    if (publishMsg(msg_vec[0], data_len) == PROCESS_FAIL)
     {
       return PROCESS_FAIL;
     }
@@ -443,27 +457,11 @@ namespace  dawn
     return PROCESS_SUCCESS;
   }
 
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
+  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
     shmIndexRingBuffer::ringBufferIndexBlockType block;
 
-    //Try to get the latest index block to taste.
-    if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-    {
-      if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
-      {
-        qosController_ptr_->updateLatestMsg(&block);
-        auto result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
-        unlockRingBuffer();
-        return result;
-      }
-      else
-      {
-        unlockRingBuffer();
-      }
-    }
-
-    auto subscribeMsg_func = [&block, this, &read_data, &data_len]() {
+    auto subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
       bool result = false;
       if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
       {
@@ -480,10 +478,16 @@ namespace  dawn
       return result;
     };
 
-    //Block until message arrival
-    if (block_type == BLOCK_TYPE::BLOCK)
+    //Try to get the latest index block to taste.
+    if (subscribeLatestMsg_func() == true)
     {
-      channel_ptr_->waitNotify(subscribeMsg_func);
+      return PROCESS_SUCCESS;
+    }
+
+    //Block until message arrival
+    if (block_type == BLOCKING_TYPE::BLOCK)
+    {
+      channel_ptr_->waitNotify(subscribeLatestMsg_func);
       return PROCESS_SUCCESS;
     }
     else
@@ -498,13 +502,12 @@ namespace  dawn
     return PROCESS_FAIL;
   }
 
-  bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp)
+  bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize)
   {
     shmIndexRingBuffer::ringBufferIndexBlockType ringBufferBlock;
     uint32_t      storePosition;
     ringBufferBlock.shmMsgIndex_ = msgIndex;
     ringBufferBlock.msgSize_ = msgSize;
-    ringBufferBlock.timeStamp_ = timeStamp;
     auto result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
 
     if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
@@ -535,7 +538,7 @@ namespace  dawn
 
   bool shmTransport::shmTransportImpl::subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
   {
-    if (ringBuffer_ptr_->watchRingBuffer(block) == PROCESS_FAIL)
+    if (ringBuffer_ptr_->watchLatestBuffer(block) == PROCESS_FAIL)
     {
       return PROCESS_FAIL;
     }
@@ -554,13 +557,6 @@ namespace  dawn
       lockMsgFlag_ = false;
     }
   }
-
-  uint32_t  shmTransport::shmTransportImpl::getTimestamp()
-  {
-    using namespace std::chrono;
-    return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch()).count();
-  }
-
 
   std::vector<uint32_t> shmTransport::shmTransportImpl::retryRequireMsgShm(uint32_t data_size)
   {
@@ -641,4 +637,9 @@ namespace  dawn
     return PROCESS_FAIL;
   }
 
+  uint32_t  getTimestamp()
+  {
+    using namespace std::chrono;
+    return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch()).count();
+  }
 }

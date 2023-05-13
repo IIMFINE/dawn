@@ -182,7 +182,7 @@ namespace dawn
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
     ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
-    bool watchRingBuffer(ringBufferIndexBlockType &indexBlock);
+    bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock);
 
     /// @brief Unlock ring buffer.
     /// @return 
@@ -266,7 +266,7 @@ namespace dawn
 
     virtual bool write(const void *write_data, const uint32_t data_len) override;
 
-    virtual bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type) override;
+    virtual bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type) override;
 
     virtual bool wait() override;
   };
@@ -278,6 +278,12 @@ namespace dawn
     scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
     ipc_ptr_->mechanism_raw_ptr_->condition_.wait(lock, std::forward<FUNC_T>(func));
   }
+  /// @brief Get a microsecond timestamp.
+  ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
+  /// @return microsecond timestamp.
+  uint32_t  getTimestamp();
+
 }
+
 
 #endif

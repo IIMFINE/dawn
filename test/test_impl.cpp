@@ -118,7 +118,7 @@ TEST(test_dawn, test_shmTp_read_loop_block)
     {
       char* data = new char[9 * 1024 * 1024];
       uint32_t len = 0;
-      if (shm_tp.read(data, len, TP::BLOCK_TYPE::BLOCK) == PROCESS_FAIL)
+      if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
       {
         std::cout << "failed" << std::endl;
       }
@@ -139,7 +139,7 @@ TEST(test_dawn, test_shmTp_read_loop_block)
 
 }
 
-TEST(test_dawn, test_shmTp_read_one_slot)
+TEST(test_dawn, test_shmTp_read_one_slot_non_block)
 {
   using namespace dawn;
   using TP = abstractTransport;
@@ -147,7 +147,29 @@ TEST(test_dawn, test_shmTp_read_one_slot)
   {
     char* data = new char[9 * 1024 * 1024];
     uint32_t len = 0;
-    if (shm_tp.read(data, len, TP::BLOCK_TYPE::NON_BLOCK) == PROCESS_FAIL)
+    if (shm_tp.read(data, len, TP::BLOCKING_TYPE::NON_BLOCK) == PROCESS_FAIL)
+    {
+      std::cout << "failed" << std::endl;
+    }
+    else
+    {
+      LOG_INFO("receive data {}", data);
+      std::cout << "receive data " << data << std::endl;
+      std::cout << "len " << len << std::endl;
+    }
+    delete data;
+  }
+}
+
+TEST(test_dawn, test_shmTp_read_one_slot_block)
+{
+  using namespace dawn;
+  using TP = abstractTransport;
+  shmTransport shm_tp("hello_world_dawn");
+  {
+    char* data = new char[9 * 1024 * 1024];
+    uint32_t len = 0;
+    if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
     {
       std::cout << "failed" << std::endl;
     }
