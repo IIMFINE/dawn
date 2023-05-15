@@ -51,15 +51,6 @@ namespace dawn
     /// @brief Get QoS type from config.
     /// @return 
     virtual qosCfg::QOS_TYPE getQosType() = 0;
-    /// @brief deliver a message pointer.Using std::any to implement polymorphism.
-    /// @param msg message pointer
-    /// @return 
-    virtual MSG_FRESHNESS tasteMsgType(std::any msg) = 0;
-    /// @brief Record a message pointer like a ring buffer index block or a entire message, which depends on the scenario.
-    ///       No thread safe.
-    /// @param msg 
-    /// @return PROCESS_SUCCESS if the msg is recorded successfully, otherwise return PROCESS_FAILED.
-    virtual bool updateLatestMsg(std::any msg) = 0;
   };
 } //namespace dawn
 

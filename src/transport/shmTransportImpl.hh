@@ -83,12 +83,12 @@ namespace dawn
     /// @param read_data
     /// @param data_len
     /// @param block_type
-    /// @return
+    /// @return PROCESS_SUCCESS: read data successfully.
     bool baseRead(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
     {
-      shmIndexRingBuffer::ringBufferIndexBlockType block;
 
-      auto subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
+      auto subscribeLatestMsg_func = [this, &read_data, &data_len]() {
+        shmIndexRingBuffer::ringBufferIndexBlockType block;
         bool result = false;
         if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
         {
@@ -186,6 +186,14 @@ namespace dawn
         ringBuffer_ptr_->stopWatchRingBuffer();
         lockMsgFlag_ = false;
       }
+    }
+
+    /// @brief 
+    /// @param block 
+    /// @return 
+    bool requireStartMsg(uint32_t &msgIndex, shmIndexRingBuffer::ringBufferIndexBlockType &block)
+    {
+      return ringBuffer_ptr_->getStartIndex(msgIndex, block);
     }
 
     std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size)

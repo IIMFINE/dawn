@@ -179,7 +179,7 @@ namespace dawn
 
     /// @brief Watch start index and lock start index mutex until operation finish.
     /// @param indexBlock 
-    /// @return 
+    /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
     bool watchStartIndex(ringBufferIndexBlockType &indexBlock);
 
     /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
@@ -189,8 +189,21 @@ namespace dawn
     bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock);
 
     /// @brief Unlock ring buffer.
-    /// @return 
+    /// @return PROCESS_SUCCESS: unlock successfully.
     bool stopWatchRingBuffer();
+
+    /// @brief Get start index for multi-purpose.
+    /// @param storeIndex reference to store start index.
+    /// @param indexBlock reference to store index block content.
+    /// @return PROCESS_SUCCESS: get start index successfully.
+    bool getStartIndex(uint32_t &storeIndex, ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Watch specific index and lock specific index mutex until watch operation asked to stop.
+    /// @param index Pass specific index to watch.
+    /// @param indexBlock Outside buffer to store index block content.
+    /// @return PROCESS_SUCCESS: lock successfully and read buffer.
+    ///         PROCESS_FAIL: index is invalid or buffer isn't initialize and will not lock.
+    bool watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock);
 
     /// @brief Pass indexBlock to compare the the block pointing by start index. If they are same, start index will move.
     /// @param indexBlock 

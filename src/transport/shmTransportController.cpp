@@ -28,14 +28,14 @@ namespace dawn
 
   bool efficientTpController_shm::read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
   {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    auto  subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
+    auto  subscribeLatestMsg_func = [this, &read_data, &data_len]() {
+      shmIndexRingBuffer::ringBufferIndexBlockType block;
       bool result = false;
       if (shmImpl_->subscribeMsgAndLock(block) == PROCESS_SUCCESS)
       {
-        if (tasteMsgType(&block) == tpController::MSG_FRESHNESS::FRESH)
+        if (tasteMsgType(block) == tpController::MSG_FRESHNESS::FRESH)
         {
-          updateLatestMsg(&block);
+          updateLatestMsg(block);
           if (shmImpl_->readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
           {
             result = true;
@@ -74,16 +74,11 @@ namespace dawn
     return qosCfg_.qosType_;
   }
 
-  tpController::MSG_FRESHNESS efficientTpController_shm::tasteMsgType(std::any msg)
+  tpController::MSG_FRESHNESS efficientTpController_shm::tasteMsgType(shmIndexRingBuffer::ringBufferIndexBlockType &msg)
   {
-    auto currentMsg_ptr = std::any_cast<shmIndexRingBuffer::ringBufferIndexBlockType*>(msg);
     std::shared_lock  lock(mutex_);
 
-    if (currentMsg_ptr == nullptr)
-    {
-      return tpController::MSG_FRESHNESS::NO_TASTE;
-    }
-    if (latestMsg_.timeStamp_ < currentMsg_ptr->timeStamp_)
+    if (latestMsg_.timeStamp_ < msg.timeStamp_)
     {
       return tpController::MSG_FRESHNESS::FRESH;
     }
@@ -93,23 +88,120 @@ namespace dawn
     }
   }
 
-  bool efficientTpController_shm::updateLatestMsg(std::any msg)
+  bool efficientTpController_shm::updateLatestMsg(shmIndexRingBuffer::ringBufferIndexBlockType  &msg)
   {
-    auto msg_ptr = std::any_cast<shmIndexRingBuffer::ringBufferIndexBlockType*>(msg);
-    assert(msg_ptr != nullptr && "update msg is nullptr");
     std::unique_lock lock(mutex_);
-    if (std::memcmp(&latestMsg_, msg_ptr, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType)) == 0)
+    if (std::memcmp(&latestMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType)) == 0)
     {
       return PROCESS_SUCCESS;
     }
-    else if (latestMsg_.timeStamp_ > msg_ptr->timeStamp_)
+    else if (latestMsg_.timeStamp_ > msg.timeStamp_)
     {
       return PROCESS_FAIL;
     }
     else
     {
-      std::memcpy(&latestMsg_, msg_ptr, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
+      std::memcpy(&latestMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
       return PROCESS_SUCCESS;
     }
   }
+
+  reliableTpController_shm::reliableTpController_shm(std::unique_ptr<shmTransportImpl> &&shmImpl) :
+    shmImpl_(std::forward<std::unique_ptr<shmTransportImpl>>(shmImpl))
+  {
+  }
+
+  reliableTpController_shm::reliableTpController_shm(std::unique_ptr<shmTransportImpl> &&shmTp, std::any config) :
+    qosCfg_(std::any_cast<qosCfg>(config)),
+    shmImpl_(std::forward<std::unique_ptr<shmTransportImpl>>(shmTp))
+  {
+  }
+
+  bool reliableTpController_shm::initialize(std::any config)
+  {
+    qosCfg_ = std::any_cast<qosCfg>(config);
+    return PROCESS_SUCCESS;
+  }
+
+  bool reliableTpController_shm::write(const void *write_data, const uint32_t data_len)
+  {
+    return shmImpl_->baseWrite(write_data, data_len);
+  }
+
+  //add reliableTpController_shm read function
+  bool reliableTpController_shm::read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
+  {
+    shmIndexRingBuffer::ringBufferIndexBlockType block;
+    auto  subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
+
+      if (shmImpl_->requireStartMsg())
+      {
+
+      }
+    };
+  }
+
+  qosCfg::QOS_TYPE reliableTpController_shm::getQosType()
+  {
+    return qosCfg_.qosType_;
+  }
+
+  tpController::MSG_FRESHNESS reliableTpController_shm::tasteMsgAtStartIndex(shmIndexRingBuffer::ringBufferIndexBlockType &startMsg, uint32_t startRingBufferIndex)
+  {
+    if (startIndex_ != startRingBufferIndex)
+    {
+      return tpController::MSG_FRESHNESS::FRESH;
+    }
+    else if (startIndex_ == startRingBufferIndex && startMsg.timeStamp_ != startMsg_.timeStamp_)
+    {
+      /// @todo Check msg is timeout by checking time stamp.
+      return tpController::MSG_FRESHNESS::FRESH;
+    }
+    else
+    {
+      return tpController::MSG_FRESHNESS::STALE;
+    }
+    return tpController::MSG_FRESHNESS::NO_TASTE;
+  }
+
+
+  tpController::MSG_FRESHNESS reliableTpController_shm::tasteMsg(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
+  {
+    if (msg.timeStamp_ > lastMsg_.timeStamp_)
+    {
+      return tpController::MSG_FRESHNESS::FRESH;
+    }
+    else if (msg.timeStamp_ == lastMsg_.timeStamp_ && ringBufferIndex == stayIndex_)
+    {
+      // This scenario happens when time stamp is in next period.
+      return tpController::MSG_FRESHNESS::FRESH;
+    }
+    else if (msg.timeStamp_ < lastMsg_.timeStamp_ && ringBufferIndex == stayIndex_)
+    {
+      return tpController::MSG_FRESHNESS::FRESH;
+    }
+    return tpController::MSG_FRESHNESS::NO_TASTE;
+  }
+
+  bool reliableTpController_shm::updateLastMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
+  {
+    if (msg.timeStamp_ > lastMsg_.timeStamp_ || ringBufferIndex != stayIndex_)
+    {
+      std::memcpy(&lastMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
+      stayIndex_ = ringBufferIndex;
+    }
+    return PROCESS_SUCCESS;
+  }
+
+  bool reliableTpController_shm::updateStartMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
+  {
+    if (msg.timeStamp_ != startMsg_.timeStamp_ || ringBufferIndex != startIndex_)
+    {
+      std::memcpy(&startMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
+      startIndex_ = ringBufferIndex;
+    }
+    return PROCESS_SUCCESS;
+  }
+
+
 }
