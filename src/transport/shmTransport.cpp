@@ -1,10 +1,10 @@
 #include <cassert>
 #include <chrono>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "shmTransport.h"
 #include "common/setLogger.h"
-#include "qosController.h"
+#include "shmTransportController.h"
+#include "shmTransportImpl.hh"
 
 namespace  dawn
 {
@@ -88,7 +88,6 @@ namespace  dawn
       ringBuffer_raw_ptr_->endIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->totalIndex_ = SHM_BLOCK_NUM;
     }
-
   }
 
   bool shmIndexRingBuffer::moveStartIndex(ringBufferIndexBlockType &indexBlock)
@@ -309,58 +308,6 @@ namespace  dawn
     return true;
   }
 
-  struct shmTransport::shmTransportImpl
-  {
-    shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr);
-    ~shmTransportImpl() = default;
-
-    /// @brief Write data to data space.
-    ///       property: thread safe
-    /// @param write_data
-    /// @param data_len
-    /// @return 
-    bool write(const void *write_data, const uint32_t data_len);
-
-    /// @brief Read data from data space.
-    ///       property: non thread safe
-    /// @param read_data
-    /// @param data_len
-    /// @param block_type
-    /// @return
-    bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type);
-    bool wait();
-
-    protected:
-    bool publishMsg(uint32_t msgIndex, uint32_t msgSize);
-
-    /// @brief Read the latest index block from ring buffer and will lock ring buffer.
-    ///        Need to use unlockRingBuffer() to unlock end index of ring buffer.
-    /// @param block 
-    /// @return PROCESS_SUCCESS if read index block successfully and will lock end index, otherwise return PROCESS_FAIL.
-    bool subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block);
-
-    /// @brief Unlock end index of ring buffer.
-    /// @return
-    void unlockRingBuffer();
-
-    std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size);
-
-    bool recycleMsg(uint32_t msgIndex);
-
-    bool recycleExpireMsg();
-
-    bool read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize);
-
-    protected:
-    std::string           identity_;
-    void                  *msgShm_raw_ptr_;
-    volatile bool         lockMsgFlag_;
-    std::shared_ptr<shmChannel>            channel_ptr_;
-    std::shared_ptr<shmMsgPool>            shmPool_ptr_;
-    std::shared_ptr<shmIndexRingBuffer>    ringBuffer_ptr_;
-    std::shared_ptr<qosController>         qosController_ptr_;
-  };
-
   shmTransport::shmTransport()
   {
   }
@@ -371,283 +318,35 @@ namespace  dawn
 
   shmTransport::shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
+    auto impl = std::make_unique<shmTransportImpl>(identity);
+    if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::EFFICIENT)
+    {
+      tpController_ptr_ = std::make_unique<efficientTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
   }
 
   void shmTransport::initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
+    auto impl = std::make_unique<shmTransportImpl>(identity);
+    if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::EFFICIENT)
+    {
+      tpController_ptr_ = std::make_unique<efficientTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
   }
-
 
   bool shmTransport::write(const void *write_data, const uint32_t data_len)
   {
-    return impl_->write(write_data, data_len);
+    return tpController_ptr_->write(write_data, data_len);
   }
 
   bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
-    return impl_->read(read_data, data_len, block_type);
+    return tpController_ptr_->read(read_data, data_len, block_type);
   }
 
   bool shmTransport::wait()
   {
     return PROCESS_SUCCESS;
-  }
-
-  shmTransport::shmTransportImpl::shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr):
-    identity_(identity)
-  {
-    channel_ptr_ = std::make_shared<shmChannel>(CHANNEL_PREFIX + identity_);
-    shmPool_ptr_ = std::make_shared<shmMsgPool>();
-    ringBuffer_ptr_ = std::make_shared<shmIndexRingBuffer>(RING_BUFFER_PREFIX + identity_);
-    msgShm_raw_ptr_ = shmPool_ptr_->getMsgRawBuffer();
-    qosController_ptr_ = std::shared_ptr<qosController>(dynamic_cast<qosController*>(new efficientQosController_shm(*(qosCfg_ptr.get()))));
-  }
-
-  bool shmTransport::shmTransportImpl::write(const void *write_data, const uint32_t data_len)
-  {
-    auto msg_vec = retryRequireMsgShm(data_len);
-
-    if (msg_vec.size() == 0)
-    {
-      LOG_ERROR("can not allocate enough shm");
-      return PROCESS_FAIL;
-    }
-
-    msgType   *prev_msg = nullptr;
-    uint32_t written_len = 0;
-    auto wait2writeLen = data_len;
-
-    /// @note Write data to shm
-    for (auto msgIndex : msg_vec)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = new(msgBlock) msgType;
-      if (wait2writeLen <= SHM_BLOCK_CONTENT_SIZE)
-      {
-        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, wait2writeLen);
-      }
-      else
-      {
-        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, SHM_BLOCK_CONTENT_SIZE);
-        wait2writeLen -= SHM_BLOCK_CONTENT_SIZE;
-        written_len += SHM_BLOCK_CONTENT_SIZE;
-      }
-
-      if (prev_msg != nullptr)
-      {
-        prev_msg->next_ = msgIndex;
-        prev_msg = msgBlockIns;
-      }
-      else
-      {
-        prev_msg = msgBlockIns;
-      }
-    }
-
-    /// @note Publish msg to ring buffer
-    if (publishMsg(msg_vec[0], data_len) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-
-    channel_ptr_->notifyAll();
-
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    std::function<bool(void)> subscribeLatestMsg_func;
-
-    switch (qosController_ptr_->getQosType())
-    {
-      case qosCfg::QOS_TYPE::EFFICIENT:
-        subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
-          bool result = false;
-          if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-          {
-            if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
-            {
-              qosController_ptr_->updateLatestMsg(&block);
-              if (read(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
-              {
-                result = true;
-              }
-            }
-            unlockRingBuffer();
-          }
-          return result;
-        };
-        break;
-      case qosCfg::QOS_TYPE::RELIABLE:
-        subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
-            
-          return false;
-        };
-        break;
-      default:
-        break;
-    }
-    //Try to get the latest index block to taste.
-    if (subscribeLatestMsg_func() == true)
-    {
-      return PROCESS_SUCCESS;
-    }
-
-    //Block until message arrival
-    if (block_type == BLOCKING_TYPE::BLOCK)
-    {
-      channel_ptr_->waitNotify(subscribeLatestMsg_func);
-      return PROCESS_SUCCESS;
-    }
-    else
-    {
-      auto result = channel_ptr_->tryWaitNotify();
-      if (result == false)
-      {
-        return PROCESS_FAIL;
-      }
-    }
-
-    return PROCESS_FAIL;
-  }
-
-  bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize)
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType ringBufferBlock;
-    uint32_t      storePosition;
-    ringBufferBlock.shmMsgIndex_ = msgIndex;
-    ringBufferBlock.msgSize_ = msgSize;
-    auto result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
-
-    if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
-    {
-      LOG_ERROR("can not write to ring buffer");
-      return PROCESS_FAIL;
-    }
-    else if (result == shmIndexRingBuffer::PROCESS_RESULT::BUFFER_FILL)
-    {
-      //Best effort to publish the message.
-      recycleExpireMsg();
-      result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
-      if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
-      {
-        LOG_ERROR("can not write to ring buffer");
-        return PROCESS_FAIL;
-      }
-      return PROCESS_SUCCESS;
-    }
-    else
-    {
-      LOG_DEBUG("shm publish successfully");
-      ///@todo record the latest message
-      return PROCESS_SUCCESS;
-    }
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
-  {
-    if (ringBuffer_ptr_->watchLatestBuffer(block) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-    else
-    {
-      lockMsgFlag_ = true;
-      return PROCESS_SUCCESS;
-    }
-  }
-
-  void shmTransport::shmTransportImpl::unlockRingBuffer()
-  {
-    if (lockMsgFlag_ == true)
-    {
-      ringBuffer_ptr_->stopWatchRingBuffer();
-      lockMsgFlag_ = false;
-    }
-  }
-
-  std::vector<uint32_t> shmTransport::shmTransportImpl::retryRequireMsgShm(uint32_t data_size)
-  {
-    int retryTime = 3;
-    for (int i = 0; i < retryTime; i++)
-    {
-      try
-      {
-        auto msg_vec = shmPool_ptr_->requireMsgShm(data_size);
-        return msg_vec;
-      }
-      catch (const std::exception& e)
-      {
-        LOG_ERROR("message shm pool is too low");
-        recycleExpireMsg();
-      }
-    }
-    return std::vector<uint32_t>{};
-  }
-
-  bool shmTransport::shmTransportImpl::recycleMsg(uint32_t msgIndex)
-  {
-    assert(msgIndex < SHM_BLOCK_NUM && "msg shm index is out of range");
-    for (;msgIndex != SHM_INVALID_INDEX;)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
-      auto nextIndex = msgBlockIns->next_;
-      shmPool_ptr_->recycleMsgShm(msgIndex);
-      msgIndex = nextIndex;
-    }
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::recycleExpireMsg()
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    if (ringBuffer_ptr_->moveStartIndex(block) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-
-    return recycleMsg(block.shmMsgIndex_);
-  }
-
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize)
-  {
-    auto msgIndex = msgHeadIndex;
-    data_len = 0;
-    if (msgIndex == SHM_INVALID_INDEX || msgSize == 0)
-    {
-      return PROCESS_FAIL;
-    }
-
-    for (;msgIndex != SHM_INVALID_INDEX;)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
-
-      if ((msgSize - data_len) < SHM_BLOCK_CONTENT_SIZE)
-      {
-        std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, (msgSize - data_len));
-        data_len += (msgSize - data_len);
-      }
-      else
-      {
-        std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, SHM_BLOCK_CONTENT_SIZE);
-        data_len += SHM_BLOCK_CONTENT_SIZE;
-      }
-      msgIndex = msgBlockIns->next_;
-    }
-
-    if (data_len == msgSize)
-    {
-      return PROCESS_SUCCESS;
-    }
-    LOG_WARN("message size is truncated {}, actual size {}", data_len, msgSize);
-    return PROCESS_FAIL;
   }
 
   uint32_t  getTimestamp()

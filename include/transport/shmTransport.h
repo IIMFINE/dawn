@@ -3,6 +3,7 @@
 #include <set>
 #include <memory>
 
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
@@ -17,6 +18,7 @@
 
 #include "transport.h"
 #include "common/setLogger.h"
+#include "qosController.h"
 
 namespace dawn
 {
@@ -113,6 +115,8 @@ namespace dawn
     template<typename FUNC_T>
     void waitNotify(FUNC_T&& func);
     bool tryWaitNotify(uint32_t microseconds = 1);
+    template<typename FUNC_T>
+    bool tryWaitNotify(FUNC_T&& func, uint32_t microsecond = 1);
     protected:
     std::string                                 identity_;
     std::shared_ptr<interprocessMechanism<IPC_t>> ipc_ptr_;
@@ -255,10 +259,6 @@ namespace dawn
 
   struct shmTransport: abstractTransport
   {
-    //Compatible with Pimpl-idiom.
-    struct shmTransportImpl;
-    std::unique_ptr<shmTransportImpl>  impl_;
-
     shmTransport();
     shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
     ~shmTransport();
@@ -269,6 +269,8 @@ namespace dawn
     virtual bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type) override;
 
     virtual bool wait() override;
+
+    std::unique_ptr<tpController>  tpController_ptr_;
   };
 
   template<typename FUNC_T>
@@ -278,12 +280,21 @@ namespace dawn
     scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
     ipc_ptr_->mechanism_raw_ptr_->condition_.wait(lock, std::forward<FUNC_T>(func));
   }
+
+  template<typename FUNC_T>
+  bool shmChannel::tryWaitNotify(FUNC_T&& func, uint32_t microsecond)
+  {
+    using namespace BI;
+    scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
+    return ipc_ptr_->mechanism_raw_ptr_->condition_.timed_wait(lock, \
+      boost::posix_time::microsec_clock::universal_time() + boost::posix_time::microseconds(microsecond), func);
+  }
+
   /// @brief Get a microsecond timestamp.
   ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
   /// @return microsecond timestamp.
   uint32_t  getTimestamp();
 
 }
-
 
 #endif
