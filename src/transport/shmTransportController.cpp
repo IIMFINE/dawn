@@ -31,7 +31,7 @@ namespace dawn
     auto  subscribeLatestMsg_func = [this, &read_data, &data_len]() {
       shmIndexRingBuffer::ringBufferIndexBlockType block;
       bool result = false;
-      if (shmImpl_->subscribeMsgAndLock(block) == PROCESS_SUCCESS)
+      if (shmImpl_->subscribeLatestMsgAndLock(block) == PROCESS_SUCCESS)
       {
         if (tasteMsgType(block) == tpController::MSG_FRESHNESS::FRESH)
         {
@@ -128,17 +128,109 @@ namespace dawn
     return shmImpl_->baseWrite(write_data, data_len);
   }
 
-  //add reliableTpController_shm read function
   bool reliableTpController_shm::read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
   {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    auto  subscribeLatestMsg_func = [&block, this, &read_data, &data_len]() {
-
-      if (shmImpl_->requireStartMsg())
+    auto  subscribeLatestMsg_func = [this, &read_data, &data_len]() {
+      shmIndexRingBuffer::ringBufferIndexBlockType startIndexBlock;
+      uint32_t   startIndex;
+      bool result = false;
+      if (shmImpl_->requireStartMsg(startIndex, startIndexBlock) == PROCESS_SUCCESS)
       {
+        switch (tasteMsgAtStartIndex(startIndexBlock, startIndex))
+        {
+          case tpController::MSG_FRESHNESS::NEW_ROUND:
+            {
+              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              {
+                uint32_t     startIndex;
+                if (shmImpl_->ringBuffer_ptr_->watchStartBuffer(startIndexBlock, startIndex) == PROCESS_SUCCESS)
+                {
+                  if (shmImpl_->readBuffer(read_data, data_len, startIndexBlock.shmMsgIndex_, startIndexBlock.msgSize_) == PROCESS_SUCCESS)
+                  {
+                    updateStartMsgAndIndex(startIndexBlock, startIndex);
+                    updateLastMsg(startIndexBlock);
+                    uint32_t msgIndex;
+                    updateStayIndex(msgIndex, startIndex);
+                    result = true;
+                  }
+                }
+                shmImpl_->unlockRingBuffer();
+              }
+            }
+            break;
 
+          case tpController::MSG_FRESHNESS::FRESH:
+            {
+              updateStartMsgAndIndex(startIndexBlock, startIndex);
+              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              {
+                uint32_t    msgIndex;
+                shmIndexRingBuffer::ringBufferIndexBlockType  block;
+                if (updateStayIndex(msgIndex) == PROCESS_SUCCESS)
+                {
+                  if (shmImpl_->ringBuffer_ptr_->watchSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
+                  {
+                    if (shmImpl_->readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+                    {
+                      updateLastMsg(block);
+                      result = true;
+                    }
+                  }
+                }
+                shmImpl_->unlockRingBuffer();
+              }
+            }
+            break;
+
+          case tpController::MSG_FRESHNESS::STALE:
+            {
+              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              {
+                uint32_t    msgIndex;
+                shmIndexRingBuffer::ringBufferIndexBlockType  block;
+                if (updateStayIndex(msgIndex) == PROCESS_SUCCESS)
+                {
+                  if (shmImpl_->ringBuffer_ptr_->watchSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
+                  {
+                    if (shmImpl_->readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+                    {
+                      updateLastMsg(block);
+                      result = true;
+                    }
+                  }
+                }
+                shmImpl_->unlockRingBuffer();
+              }
+            }
+            break;
+          default:
+            result = false;
+            break;
+        }
       }
+
+      return result;
     };
+
+    if (subscribeLatestMsg_func() == true)
+    {
+      return PROCESS_SUCCESS;
+    }
+
+    if (block_type == abstractTransport::BLOCKING_TYPE::BLOCK)
+    {
+      shmImpl_->channel_ptr_->waitNotify(subscribeLatestMsg_func);
+      return PROCESS_SUCCESS;
+    }
+    else
+    {
+      auto result = shmImpl_->channel_ptr_->tryWaitNotify(subscribeLatestMsg_func);
+      if (result == false)
+      {
+        return PROCESS_FAIL;
+      }
+    }
+    return PROCESS_FAIL;
   }
 
   qosCfg::QOS_TYPE reliableTpController_shm::getQosType()
@@ -148,18 +240,26 @@ namespace dawn
 
   tpController::MSG_FRESHNESS reliableTpController_shm::tasteMsgAtStartIndex(shmIndexRingBuffer::ringBufferIndexBlockType &startMsg, uint32_t startRingBufferIndex)
   {
-    if (startIndex_ != startRingBufferIndex)
+    std::shared_lock        lock(startMsgMutex_);
+    if (recordStartIndex_ != SHM_INVALID_INDEX)
     {
-      return tpController::MSG_FRESHNESS::FRESH;
-    }
-    else if (startIndex_ == startRingBufferIndex && startMsg.timeStamp_ != startMsg_.timeStamp_)
-    {
-      /// @todo Check msg is timeout by checking time stamp.
-      return tpController::MSG_FRESHNESS::FRESH;
+      if (recordStartIndex_ != startRingBufferIndex)
+      {
+        return tpController::MSG_FRESHNESS::FRESH;
+      }
+      else if (recordStartIndex_ == startRingBufferIndex && startMsg.timeStamp_ != startBlock_.timeStamp_)
+      {
+        /// @todo Check msg is timeout by checking time stamp.
+        return tpController::MSG_FRESHNESS::NEW_ROUND;
+      }
+      else
+      {
+        return tpController::MSG_FRESHNESS::STALE;
+      }
     }
     else
     {
-      return tpController::MSG_FRESHNESS::STALE;
+      return tpController::MSG_FRESHNESS::NEW_ROUND;
     }
     return tpController::MSG_FRESHNESS::NO_TASTE;
   }
@@ -167,41 +267,90 @@ namespace dawn
 
   tpController::MSG_FRESHNESS reliableTpController_shm::tasteMsg(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
   {
-    if (msg.timeStamp_ > lastMsg_.timeStamp_)
+    std::shared_lock        lock(lastMsgMutex_);
+    if (stayIndex_ != SHM_INVALID_INDEX)
     {
-      return tpController::MSG_FRESHNESS::FRESH;
+      if (msg.timeStamp_ > lastBlock_.timeStamp_)
+      {
+        return tpController::MSG_FRESHNESS::FRESH;
+      }
+      else if (msg.timeStamp_ == lastBlock_.timeStamp_ && ringBufferIndex == stayIndex_)
+      {
+        // This scenario happens when time stamp is in next period.
+        return tpController::MSG_FRESHNESS::FRESH;
+      }
+      else if (msg.timeStamp_ < lastBlock_.timeStamp_ && ringBufferIndex == stayIndex_)
+      {
+        return tpController::MSG_FRESHNESS::FRESH;
+      }
     }
-    else if (msg.timeStamp_ == lastMsg_.timeStamp_ && ringBufferIndex == stayIndex_)
-    {
-      // This scenario happens when time stamp is in next period.
-      return tpController::MSG_FRESHNESS::FRESH;
-    }
-    else if (msg.timeStamp_ < lastMsg_.timeStamp_ && ringBufferIndex == stayIndex_)
+    else
     {
       return tpController::MSG_FRESHNESS::FRESH;
     }
     return tpController::MSG_FRESHNESS::NO_TASTE;
   }
 
-  bool reliableTpController_shm::updateLastMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
+  bool reliableTpController_shm::updateLastMsg(shmIndexRingBuffer::ringBufferIndexBlockType &block)
   {
-    if (msg.timeStamp_ > lastMsg_.timeStamp_ || ringBufferIndex != stayIndex_)
-    {
-      std::memcpy(&lastMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
-      stayIndex_ = ringBufferIndex;
-    }
+    std::unique_lock       shared_lock(lastMsgMutex_);
+    std::memcpy(&lastBlock_, &block, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
     return PROCESS_SUCCESS;
   }
 
-  bool reliableTpController_shm::updateStartMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex)
+  bool reliableTpController_shm::updateStartMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &block, uint32_t ringBufferIndex)
   {
-    if (msg.timeStamp_ != startMsg_.timeStamp_ || ringBufferIndex != startIndex_)
+    std::unique_lock       shared_lock(startMsgMutex_);
+    if (ringBufferIndex != recordStartIndex_ && block.timeStamp_ != startBlock_.timeStamp_)
     {
-      std::memcpy(&startMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
-      startIndex_ = ringBufferIndex;
+      std::memcpy(&startBlock_, &block, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType));
+      recordStartIndex_ = ringBufferIndex;
+      return PROCESS_SUCCESS;
     }
-    return PROCESS_SUCCESS;
+    else
+    {
+      return PROCESS_FAIL;
+    }
   }
 
+  bool reliableTpController_shm::updateStayIndex(uint32_t &updatedIndex)
+  {
+    auto oldIndex = stayIndex_.load(std::memory_order_acquire);
+
+    if (shmImpl_->checkMsgIndexValid(oldIndex) == false)
+    {
+      return PROCESS_FAIL;
+    }
+
+    while (stayIndex_.compare_exchange_strong(oldIndex, oldIndex + 1, std::memory_order_acq_rel) == false)
+    {
+      if (shmImpl_->checkMsgIndexValid(oldIndex + 1) == true)
+      {
+        continue;
+      }
+      return PROCESS_FAIL;
+    }
+    if (shmImpl_->checkMsgIndexValid(oldIndex + 1) == true)
+    {
+      updatedIndex = oldIndex + 1;
+      return PROCESS_SUCCESS;
+    }
+    else
+    {
+      return PROCESS_FAIL;
+    }
+  }
+
+  bool reliableTpController_shm::updateStayIndex(uint32_t &updatedIndex, uint32_t ringBufferIndex)
+  {
+    auto oldIndex = stayIndex_.load(std::memory_order_acquire);
+
+    //If other thread is updating stayIndex_, then wait for it to finish.
+    while (stayIndex_.compare_exchange_weak(oldIndex, ringBufferIndex, std::memory_order_acq_rel) != true)
+    {
+    }
+    updatedIndex = ringBufferIndex;
+    return PROCESS_SUCCESS;
+  }
 
 }

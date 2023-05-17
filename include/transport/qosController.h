@@ -21,6 +21,9 @@ namespace dawn
       EFFICIENT
     };
     qosCfg() = default;
+    explicit qosCfg(QOS_TYPE qos_type) :
+      qosType_(qos_type)
+    {}
     virtual ~qosCfg() = default;
     QOS_TYPE qosType_ = QOS_TYPE::EFFICIENT;
   };
@@ -37,6 +40,7 @@ namespace dawn
     {
       FRESH,
       STALE,
+      NEW_ROUND,
       NO_TASTE
     };
 

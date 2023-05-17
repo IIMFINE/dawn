@@ -10,6 +10,7 @@ namespace dawn
   struct shmTransportImpl
   {
     friend struct efficientTpController_shm;
+    friend struct reliableTpController_shm;
     shmTransportImpl(std::string_view identity) :
       identity_(identity)
     {
@@ -86,11 +87,10 @@ namespace dawn
     /// @return PROCESS_SUCCESS: read data successfully.
     bool baseRead(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
     {
-
       auto subscribeLatestMsg_func = [this, &read_data, &data_len]() {
         shmIndexRingBuffer::ringBufferIndexBlockType block;
         bool result = false;
-        if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
+        if (subscribeLatestMsgAndLock(block) == PROCESS_SUCCESS)
         {
           if (readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
           {
@@ -109,14 +109,39 @@ namespace dawn
       }
       else
       {
-        auto result = channel_ptr_->tryWaitNotify();
-        if (result == false)
+        if (channel_ptr_->tryWaitNotify() == false)
         {
           return PROCESS_FAIL;
         }
-        return subscribeLatestMsg_func();
+
+        if (subscribeLatestMsg_func() == true)
+        {
+          return PROCESS_SUCCESS;
+        }
+        else
+        {
+          return PROCESS_FAIL;
+        }
       }
 
+      return PROCESS_FAIL;
+    }
+
+    bool readSpecificIndexMsg(void *read_data, uint32_t &data_len, uint32_t msgIndex, shmIndexRingBuffer::ringBufferIndexBlockType &block)
+    {
+      bool result = false;
+      if (ringBuffer_ptr_->watchSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
+      {
+        if (readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
+        {
+          result = true;
+        }
+        ringBuffer_ptr_->stopWatchSpecificIndexBuffer();
+      }
+      if (result == true)
+      {
+        return PROCESS_SUCCESS;
+      }
       return PROCESS_FAIL;
     }
 
@@ -164,7 +189,7 @@ namespace dawn
     ///        Need to use unlockRingBuffer() to unlock end index of ring buffer.
     /// @param block 
     /// @return PROCESS_SUCCESS if read index block successfully and will lock end index, otherwise return PROCESS_FAIL.
-    bool subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
+    bool subscribeLatestMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
     {
       if (ringBuffer_ptr_->watchLatestBuffer(block) == PROCESS_FAIL)
       {
@@ -177,20 +202,36 @@ namespace dawn
       }
     }
 
+    bool checkMsgIndexValid(uint32_t msgIndex)
+    {
+      return ringBuffer_ptr_->checkIndexValid(msgIndex);
+    }
+
+    bool lockRingBuffer()
+    {
+      if (lockMsgFlag_ == false)
+      {
+        ringBuffer_ptr_->lockBuffer();
+        lockMsgFlag_ = true;
+      }
+      return PROCESS_SUCCESS;
+    }
+
     /// @brief Unlock end index of ring buffer.
     /// @return
     void unlockRingBuffer()
     {
       if (lockMsgFlag_ == true)
       {
-        ringBuffer_ptr_->stopWatchRingBuffer();
+        ringBuffer_ptr_->stopWatchLatestBuffer();
         lockMsgFlag_ = false;
       }
     }
 
-    /// @brief 
-    /// @param block 
-    /// @return 
+    /// @brief Read data at ring buffer start position.
+    /// @param msgIndex position
+    /// @param block content
+    /// @return PROCESS_SUCCESS if read data successfully, otherwise return PROCESS_FAIL.
     bool requireStartMsg(uint32_t &msgIndex, shmIndexRingBuffer::ringBufferIndexBlockType &block)
     {
       return ringBuffer_ptr_->getStartIndex(msgIndex, block);

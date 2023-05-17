@@ -1,5 +1,6 @@
 #ifndef __SHM_TRANSPORT_CONTROLLER_H__
 #define __SHM_TRANSPORT_CONTROLLER_H__
+#include <atomic>
 
 #include "qosController.h"
 #include "shmTransport.h"
@@ -57,14 +58,32 @@ namespace dawn
 
     MSG_FRESHNESS tasteMsgAtStartIndex(shmIndexRingBuffer::ringBufferIndexBlockType &startMsg, uint32_t ringBufferIndex);
     MSG_FRESHNESS tasteMsg(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex);
-    bool updateLastMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex);
+    bool updateLastMsg(shmIndexRingBuffer::ringBufferIndexBlockType &msg);
     bool updateStartMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex);
+
+    /// @brief Update stay index.
+    /// @param updatedIndex Tell the caller the updated stay index.
+    /// @param ringBufferIndex If ringBufferIndex is SHM_INVALID_INDEX, then stayIndex_ will be added by 1.
+    ///                        Otherwise, stayIndex_ will be updated by ringBufferIndex.
+    /// @return PROCESS_SUCCESS if the stay index is updated successfully, otherwise return PROCESS_FAILED.
+    bool updateStayIndex(uint32_t &updatedIndex, uint32_t ringBufferIndex);
+
+    /// @brief Update stay index.
+    /// @param updatedIndex Tell the caller the updated stay index.
+    /// @param ringBufferIndex If ringBufferIndex is SHM_INVALID_INDEX, then stayIndex_ will be added by 1.
+    ///                        Otherwise, stayIndex_ will be updated by ringBufferIndex.
+    /// @return PROCESS_SUCCESS if the stay index is updated successfully, otherwise return PROCESS_FAILED.
+    bool updateStayIndex(uint32_t &updatedIndex);
+
     private:
-    std::shared_mutex                                 mutex_;
-    shmIndexRingBuffer::ringBufferIndexBlockType      lastMsg_;
-    shmIndexRingBuffer::ringBufferIndexBlockType      startMsg_;
-    uint32_t                                          stayIndex_;
-    uint32_t                                          startIndex_;
+    std::shared_mutex                                 lastMsgMutex_;
+    std::shared_mutex                                 startMsgMutex_;
+    shmIndexRingBuffer::ringBufferIndexBlockType      lastBlock_;
+    shmIndexRingBuffer::ringBufferIndexBlockType      startBlock_;
+
+    /// @todo use atomic variable to replace the following two variables.
+    std::atomic<uint32_t>                             stayIndex_ = SHM_INVALID_INDEX;
+    uint32_t                                          recordStartIndex_ = SHM_INVALID_INDEX;
     qosCfg                                            qosCfg_;
     std::unique_ptr<shmTransportImpl>                 shmImpl_;
   };

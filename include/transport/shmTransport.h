@@ -9,6 +9,7 @@
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/interprocess/sync/interprocess_condition.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
+#include <boost/interprocess/sync/interprocess_recursive_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 
 #include <boost/interprocess/sync/named_condition.hpp>
@@ -157,8 +158,8 @@ namespace dawn
       {
       }
       ~IPC_t() = default;
-      BI::interprocess_mutex             startIndex_mutex_;
-      BI::interprocess_mutex             endIndex_mutex_;
+      BI::interprocess_recursive_mutex             startIndex_mutex_;
+      BI::interprocess_recursive_mutex             endIndex_mutex_;
       BI::interprocess_semaphore         ringBufferInitializedFlag_;
     };
 
@@ -180,7 +181,13 @@ namespace dawn
     /// @brief Watch start index and lock start index mutex until operation finish.
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
-    bool watchStartIndex(ringBufferIndexBlockType &indexBlock);
+    bool watchStartBuffer(ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Watch start index and lock start index mutex until operation finish.
+    /// @param indexBlock 
+    /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
+    bool watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
 
     /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
     /// @param indexBlock 
@@ -188,9 +195,23 @@ namespace dawn
     ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
     bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock);
 
+    /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
+    /// @param indexBlock 
+    /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
+    ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
+    bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
+    /// @brief Unlock start index mutex.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool stopWatchStartIndex();
+
     /// @brief Unlock ring buffer.
     /// @return PROCESS_SUCCESS: unlock successfully.
-    bool stopWatchRingBuffer();
+    bool stopWatchLatestBuffer();
+
+    /// @brief Unlock ring buffer.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool stopWatchSpecificIndexBuffer();
 
     /// @brief Get start index for multi-purpose.
     /// @param storeIndex reference to store start index.
@@ -205,10 +226,23 @@ namespace dawn
     ///         PROCESS_FAIL: index is invalid or buffer isn't initialize and will not lock.
     bool watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock);
 
+    /// @brief Lock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: lock successfully.
+    bool lockBuffer();
+
+    /// @brief Unlock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool unlockBuffer();
+
     /// @brief Pass indexBlock to compare the the block pointing by start index. If they are same, start index will move.
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: 
     bool compareAndMoveStartIndex(ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Check index is valid or not.
+    /// @param index msg index
+    /// @return 
+    bool checkIndexValid(uint32_t index);
 
     /// @brief Calculate index conformed to ring buffer size.
     /// @param ringBufferIndex 
@@ -219,13 +253,13 @@ namespace dawn
     /// @param ringBufferIndex 
     /// @return 
     uint32_t calculateLastIndex(uint32_t ringBufferIndex);
-    protected:
+
     std::shared_ptr<BI::named_semaphore>            ringBufferInitialFlag_ptr_;
     std::shared_ptr<interprocessMechanism<IPC_t>>   ipc_ptr_;
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
-    BI::scoped_lock<BI::interprocess_mutex>         endIndex_lock_;
-    BI::scoped_lock<BI::interprocess_mutex>         startIndex_lock_;
+    BI::scoped_lock<BI::interprocess_recursive_mutex>         endIndex_lock_;
+    BI::scoped_lock<BI::interprocess_recursive_mutex>         startIndex_lock_;
 
     ringBufferType                                  *ringBuffer_raw_ptr_;
     std::string                                     shmIdentity_;
