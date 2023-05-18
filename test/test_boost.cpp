@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 #include <iostream>
 #include <thread>
+#include <future>
 
 #include <boost/interprocess/managed_shared_memory.hpp>
 #include <boost/interprocess/shared_memory_object.hpp>
@@ -12,6 +13,7 @@
 #include <boost/interprocess/sync/named_upgradable_mutex.hpp>
 #include <boost/interprocess/sync/sharable_lock.hpp>
 #include <boost/interprocess/sync/upgradable_lock.hpp>
+#include <boost/interprocess/sync/named_recursive_mutex.hpp>
 
 #include <signal.h>
 TEST(test_core_dump, test_core_dump)
@@ -89,7 +91,12 @@ TEST(test_boost, create_named_semaphore_shm)
 
 TEST(test_boost, boost_version)
 {
-  std::cout << BOOST_VERSION << std::endl;
+  // std::cout << BOOST_VERSION << std::endl;
+  std::cout << "Using Boost "
+    << BOOST_VERSION / 100000 << "."  // major version
+    << BOOST_VERSION / 100 % 1000 << "."  // minor version
+    << BOOST_VERSION % 100                // patch level
+    << std::endl;
 }
 
 TEST(test_boost, test_upgradable_mutex_shared1)
@@ -122,13 +129,14 @@ TEST(test_boost, test_upgradable_mutex_upgrade)
 {
   using namespace BI;
   named_upgradable_mutex upgradable_mut(open_or_create, "hello_world_dawn");
+  std::cout << "try to lock shared" << std::endl;
+  upgradable_mut.lock_sharable();
+  std::cout << "end shared" << std::endl;
+
   std::cout << "try to lock upgrade" << std::endl;
-  // upgradable_mut.lock_upgradable();
-  if (upgradable_mut.try_lock_upgradable() == false)
-  {
-    std::cout << "failed to lock upgrade" << std::endl;
-  }
+  upgradable_mut.lock_upgradable();
   std::cout << "end " << std::endl;
+
   while (1)
   {
     std::this_thread::yield();
@@ -138,12 +146,11 @@ TEST(test_boost, test_upgradable_mutex_upgrade)
 TEST(test_boost, test_sharable_lock)
 {
   using namespace BI;
-  named_upgradable_mutex::remove("hello_world_dawn");
   named_upgradable_mutex upgradable_mut(open_or_create, "hello_world_dawn");
-  sharable_lock<named_upgradable_mutex>   lock(upgradable_mut, defer_lock);
+
   std::cout << "try to lock sharable" << std::endl;
-  lock.lock();
-  std::cout << "end" << std::endl;
+  upgradable_mut.lock_sharable();
+  std::cout << "lock" << std::endl;
   while (1)
   {
     std::this_thread::yield();
@@ -153,23 +160,37 @@ TEST(test_boost, test_sharable_lock)
 TEST(test_boost, test_upgradable_lock)
 {
   using namespace BI;
-  remove("hello_world_dawn");
-  named_upgradable_mutex upgradable_mut(open_or_create, "hello_world_dawn");
+  named_upgradable_mutex name_mut(open_or_create, "hello_world_dawn");
   std::cout << "try to lock upgradable" << std::endl;
 
-  upgradable_lock<named_upgradable_mutex>   lock(upgradable_mut, defer_lock);
+  upgradable_lock<named_upgradable_mutex>   lock1(name_mut);
 
-  lock.lock();
-  std::cout << "lock" << std::endl;
-  lock.unlock();
-  named_upgradable_mutex::remove("hello_world_dawn");
-  std::cout << "remove mutex" << std::endl;
+  std::cout << "upgradable lock 1" << std::endl;
+
+  upgradable_lock<named_upgradable_mutex>   lock2(name_mut);
+
+  std::cout << "upgradable lock 2" << std::endl;
+
   while (1)
   {
     std::this_thread::yield();
   }
 }
 
+TEST(test_boost, test_scoped_lock_upgradable)
+{
+  using namespace BI;
+  named_upgradable_mutex name_mut(open_or_create, "hello_world_dawn");
+  std::cout << "try to lock scoped" << std::endl;
+
+  scoped_lock<named_upgradable_mutex>   lock(name_mut);
+
+  std::cout << "lock" << std::endl;
+  while (1)
+  {
+    std::this_thread::yield();
+  }
+}
 
 struct lock_guard
 {
@@ -215,17 +236,101 @@ TEST(test_boost, test_scoped_lock2)
   }
 }
 
+TEST(test_boost, test_scoped_lock_multi_thread)
+{
+  boost::interprocess::named_mutex mutex(boost::interprocess::open_or_create, "test_dawn_scoped");
+  auto func = [&]() {
+    boost::interprocess::scoped_lock<boost::interprocess::named_mutex> lock(mutex, boost::interprocess::defer_lock);
+    lock.lock();
+    std::cout << "**lock** " << std::endl;
+    int i = 10;
+    while (i--)
+    {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  };
+
+  auto future1 = std::async(std::launch::async, func);
+  auto future2 = std::async(std::launch::async, func);
+  auto future3 = std::async(std::launch::async, func);
+  auto future4 = std::async(std::launch::async, func);
+  int i = 10;
+  while (i--)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+}
+
+TEST(test_boost, test_named_recursive_mutex)
+{
+  boost::interprocess::named_recursive_mutex mutex(boost::interprocess::open_or_create, "test_recursive_mutex");
+  auto func = [&]() {
+    // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock(mutex);
+    // std::cout << "**lock** " << std::endl;
+    // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock2(mutex);
+    // std::cout << "**lock2** " << std::endl;
+    // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock3(mutex);
+    // std::cout << "**lock3** " << std::endl;
+    // lock3.unlock();
+    mutex.lock();
+    std::cout << "**lock**" << std::endl;
+    mutex.lock();
+    std::cout << "**lock2**" << std::endl;
+    mutex.lock();
+    std::cout << "**lock3**" << std::endl;
+    int i = 10;
+    while (i--)
+    {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  };
+
+  auto future1 = std::async(std::launch::async, func);
+  auto future2 = std::async(std::launch::async, func);
+  auto future3 = std::async(std::launch::async, func);
+  auto future4 = std::async(std::launch::async, func);
+  int i = 10;
+  while (i--)
+  {
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+}
+
+TEST(test_boost, test_named_recursive_mutex2)
+{
+  boost::interprocess::named_recursive_mutex mutex(boost::interprocess::open_or_create, "test_recursive_mutex");
+  auto func = [&]() {
+    boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock(mutex, boost::interprocess::defer_lock);
+    lock.lock();
+    std::cout << "**lock1** " << std::endl;
+    lock.lock();
+    std::cout << "**lock2** " << std::endl;
+    lock.lock();
+    std::cout << "**lock3** " << std::endl;
+    int i = 10;
+    while (i--)
+    {
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+    }
+  };
+
+  auto future1 = std::async(std::launch::async, func);
+  auto future2 = std::async(std::launch::async, func);
+  auto future3 = std::async(std::launch::async, func);
+  auto future4 = std::async(std::launch::async, func);
+  int i = 10;
+  while (i--)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
+}
+
 TEST(test_boost, test_mutex_remove)
 {
   if (boost::interprocess::named_mutex::remove("hello_world_dawn_scoped"))
   {
     std::cout << "remove" << std::endl;
   }
-}
-
-TEST(test_boost, test_semaphore_wait)
-{
-  
 }
 
 struct test_anonymous

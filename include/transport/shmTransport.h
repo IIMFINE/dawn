@@ -3,11 +3,13 @@
 #include <set>
 #include <memory>
 
+#include <boost/date_time/posix_time/posix_time.hpp>
 #include <boost/interprocess/shared_memory_object.hpp>
 #include <boost/interprocess/mapped_region.hpp>
 #include <boost/interprocess/sync/scoped_lock.hpp>
 #include <boost/interprocess/sync/interprocess_condition.hpp>
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
+#include <boost/interprocess/sync/interprocess_recursive_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
 
 #include <boost/interprocess/sync/named_condition.hpp>
@@ -17,6 +19,7 @@
 
 #include "transport.h"
 #include "common/setLogger.h"
+#include "qosController.h"
 
 namespace dawn
 {
@@ -52,6 +55,9 @@ namespace dawn
   struct interprocessMechanism
   {
     interprocessMechanism() = default;
+    /// @brief Provide a mechanism to share mutex, condition, semaphore, etc.
+    ///        *WARN*  But exclude message queue, shared memory.
+    /// @param identity The identity for boost interprocess mechanism.
     interprocessMechanism(std::string_view   identity);
     ~interprocessMechanism() = default;
     void initialize(std::string_view identity);
@@ -113,6 +119,8 @@ namespace dawn
     template<typename FUNC_T>
     void waitNotify(FUNC_T&& func);
     bool tryWaitNotify(uint32_t microseconds = 1);
+    template<typename FUNC_T>
+    bool tryWaitNotify(FUNC_T&& func, uint32_t microsecond = 1);
     protected:
     std::string                                 identity_;
     std::shared_ptr<interprocessMechanism<IPC_t>> ipc_ptr_;
@@ -153,8 +161,8 @@ namespace dawn
       {
       }
       ~IPC_t() = default;
-      BI::interprocess_mutex             startIndex_mutex_;
-      BI::interprocess_mutex             endIndex_mutex_;
+      BI::interprocess_recursive_mutex             startIndex_mutex_;
+      BI::interprocess_recursive_mutex             endIndex_mutex_;
       BI::interprocess_semaphore         ringBufferInitializedFlag_;
     };
 
@@ -175,23 +183,69 @@ namespace dawn
 
     /// @brief Watch start index and lock start index mutex until operation finish.
     /// @param indexBlock 
-    /// @return 
-    bool watchStartIndex(ringBufferIndexBlockType &indexBlock);
+    /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
+    bool watchStartBuffer(ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Watch start index and lock start index mutex until operation finish.
+    /// @param indexBlock 
+    /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
+    bool watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
 
     /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
     ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
-    bool watchRingBuffer(ringBufferIndexBlockType &indexBlock);
+    bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
+    /// @param indexBlock 
+    /// @return PROCESS_SUCCESS: lock successfully and read buffer. 
+    ///         PROCESS_FAIL: buffer is empty or buffer isn't initialize and will not lock.
+    bool watchLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
+    /// @brief Unlock start index mutex.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool stopWatchStartIndex();
 
     /// @brief Unlock ring buffer.
-    /// @return 
-    bool stopWatchRingBuffer();
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool stopWatchLatestBuffer();
+
+    /// @brief Unlock ring buffer.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool stopWatchSpecificIndexBuffer();
+
+    /// @brief Get start index for multi-purpose.
+    /// @param storeIndex reference to store start index.
+    /// @param indexBlock reference to store index block content.
+    /// @return PROCESS_SUCCESS: get start index successfully.
+    bool getStartIndex(uint32_t &storeIndex, ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Watch specific index and lock specific index mutex until watch operation asked to stop.
+    /// @param index Pass specific index to watch.
+    /// @param indexBlock Outside buffer to store index block content.
+    /// @return PROCESS_SUCCESS: lock successfully and read buffer.
+    ///         PROCESS_FAIL: index is invalid or buffer isn't initialize and will not lock.
+    bool watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Lock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: lock successfully.
+    bool lockBuffer();
+
+    /// @brief Unlock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool unlockBuffer();
 
     /// @brief Pass indexBlock to compare the the block pointing by start index. If they are same, start index will move.
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: 
     bool compareAndMoveStartIndex(ringBufferIndexBlockType &indexBlock);
+
+    /// @brief Check index is valid or not.
+    /// @param index msg index
+    /// @return 
+    bool checkIndexValid(uint32_t index);
 
     /// @brief Calculate index conformed to ring buffer size.
     /// @param ringBufferIndex 
@@ -202,13 +256,12 @@ namespace dawn
     /// @param ringBufferIndex 
     /// @return 
     uint32_t calculateLastIndex(uint32_t ringBufferIndex);
-    protected:
-    std::shared_ptr<BI::named_semaphore>            ringBufferInitialFlag_ptr_;
+
     std::shared_ptr<interprocessMechanism<IPC_t>>   ipc_ptr_;
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
-    BI::scoped_lock<BI::interprocess_mutex>         endIndex_lock_;
-    BI::scoped_lock<BI::interprocess_mutex>         startIndex_lock_;
+    BI::scoped_lock<BI::interprocess_recursive_mutex>         endIndex_lock_;
+    BI::scoped_lock<BI::interprocess_recursive_mutex>         startIndex_lock_;
 
     ringBufferType                                  *ringBuffer_raw_ptr_;
     std::string                                     shmIdentity_;
@@ -255,20 +308,20 @@ namespace dawn
 
   struct shmTransport: abstractTransport
   {
-    //Compatible with Pimpl-idiom.
-    struct shmTransportImpl;
-    std::unique_ptr<shmTransportImpl>  impl_;
-
     shmTransport();
     shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
     ~shmTransport();
+    shmTransport(const shmTransport&) = delete;
+    shmTransport& operator=(const shmTransport&) = delete;
     void initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
 
     virtual bool write(const void *write_data, const uint32_t data_len) override;
 
-    virtual bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type) override;
+    virtual bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type) override;
 
     virtual bool wait() override;
+
+    std::unique_ptr<tpController>  tpController_ptr_;
   };
 
   template<typename FUNC_T>
@@ -278,6 +331,21 @@ namespace dawn
     scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
     ipc_ptr_->mechanism_raw_ptr_->condition_.wait(lock, std::forward<FUNC_T>(func));
   }
+
+  template<typename FUNC_T>
+  bool shmChannel::tryWaitNotify(FUNC_T&& func, uint32_t microsecond)
+  {
+    using namespace BI;
+    scoped_lock<interprocess_mutex> lock(ipc_ptr_->mechanism_raw_ptr_->mutex_);
+    return ipc_ptr_->mechanism_raw_ptr_->condition_.timed_wait(lock, \
+      boost::posix_time::microsec_clock::universal_time() + boost::posix_time::microseconds(microsecond), func);
+  }
+
+  /// @brief Get a microsecond timestamp.
+  ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
+  /// @return microsecond timestamp.
+  uint32_t  getTimestamp();
+
 }
 
 #endif

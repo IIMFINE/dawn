@@ -10,7 +10,14 @@ find_package(GTest CONFIG REQUIRED)
 
 set(ADD_THIRD_PARTY_LIB GTest::gtest)
 
-add_executable(test ${DIR_SRC}/test.cpp ${DIR_SRC}/test_impl.cpp ${DIR_SRC}/test_boost.cpp ${DIR_SRC}/test_comm_func.cpp ${DIR_SRC}/test_benchmark.cpp)
+add_executable(
+  test ${DIR_SRC}/test.cpp
+  ${DIR_SRC}/test_impl.cpp
+  ${DIR_SRC}/test_boost.cpp
+  ${DIR_SRC}/test_comm_func.cpp
+  ${DIR_SRC}/test_benchmark.cpp
+  ${DIR_SRC}/test_shm_transport.cpp
+)
 
 add_dependencies(test common discovery transport)
 
@@ -30,6 +37,6 @@ TARGET_LINK_LIBRARIES(test
   rt
   ${ADD_THIRD_PARTY_LIB}
 ) # CMAKE_SOURCE_DIR is the root entrance CMakeLists.txt directory
-set(EXECUTABLE_OUTPUT_PATH    ${CMAKE_SOURCE_DIR}/bin)
+set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../bin)
 
 

@@ -1,10 +1,10 @@
 #include <cassert>
 #include <chrono>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 #include "shmTransport.h"
 #include "common/setLogger.h"
-#include "qosController.h"
+#include "shmTransportController.h"
+#include "shmTransportImpl.hh"
 
 namespace  dawn
 {
@@ -88,12 +88,11 @@ namespace  dawn
       ringBuffer_raw_ptr_->endIndex_ = SHM_INVALID_INDEX;
       ringBuffer_raw_ptr_->totalIndex_ = SHM_BLOCK_NUM;
     }
-
   }
 
   bool shmIndexRingBuffer::moveStartIndex(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_recursive_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
     {
@@ -125,7 +124,10 @@ namespace  dawn
 
   shmIndexRingBuffer::PROCESS_RESULT shmIndexRingBuffer::moveEndIndex(ringBufferIndexBlockType &indexBlock, uint32_t &storePosition)
   {
-    BI::scoped_lock<BI::interprocess_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_recursive_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+
+    /// @note Accurate time stamp must be get after locked.
+    indexBlock.timeStamp_ = getTimestamp();
 
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
@@ -159,18 +161,55 @@ namespace  dawn
     return PROCESS_RESULT::FAIL;
   }
 
-  bool shmIndexRingBuffer::watchStartIndex(ringBufferIndexBlockType &indexBlock)
+  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock)
   {
-    ///@todo Return block content pointed by start index and lock start index until completed operation.
-    return PROCESS_SUCCESS;
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
+      startIndex_lock_ = std::move(startIndexLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
   }
 
-  bool shmIndexRingBuffer::watchRingBuffer(ringBufferIndexBlockType &indexBlock)
+  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
   {
-    BI::scoped_lock<BI::interprocess_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
+      index = ringBuffer_raw_ptr_->startIndex_;
+      startIndex_lock_ = std::move(startIndexLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::watchLatestBuffer(ringBufferIndexBlockType &indexBlock)
+  {
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
     ///@note Lock start index prevent other process move start index overlap end index.
     ///     It will cause ring buffer is empty, but still to read content.
-    BI::scoped_lock<BI::interprocess_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
@@ -191,10 +230,118 @@ namespace  dawn
     return PROCESS_FAIL;
   }
 
-  bool shmIndexRingBuffer::stopWatchRingBuffer()
+  bool shmIndexRingBuffer::watchLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
+  {
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    ///@note Lock start index prevent other process move start index overlap end index.
+    ///     It will cause ring buffer is empty, but still to read content.
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateLastIndex(ringBuffer_raw_ptr_->endIndex_)], sizeof(ringBufferIndexBlockType));
+      index = calculateLastIndex(ringBuffer_raw_ptr_->endIndex_);
+      endIndex_lock_ = std::move(endLock);
+      startIndex_lock_ = std::move(startLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::stopWatchSpecificIndexBuffer()
   {
     startIndex_lock_.unlock();
     endIndex_lock_.unlock();
+    return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::stopWatchStartIndex()
+  {
+    startIndex_lock_.unlock();
+    return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::stopWatchLatestBuffer()
+  {
+    startIndex_lock_.unlock();
+    endIndex_lock_.unlock();
+    return PROCESS_SUCCESS;
+  }
+
+  bool  shmIndexRingBuffer::getStartIndex(uint32_t &storeIndex, ringBufferIndexBlockType &indexBlock)
+  {
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      storeIndex = ringBuffer_raw_ptr_->startIndex_;
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock)
+  {
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    ///@note Lock start index prevent other process move start index overlap end index.
+    ///     It will cause ring buffer is empty, but still to read content.
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+
+    if (checkIndexValid(index) == PROCESS_FAIL)
+    {
+      return PROCESS_FAIL;
+    }
+
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateIndex(index)], sizeof(ringBufferIndexBlockType));
+      endIndex_lock_ = std::move(endLock);
+      startIndex_lock_ = std::move(startLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::lockBuffer()
+  {
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    endIndex_lock_ = std::move(endLock);
+    startIndex_lock_ = std::move(startLock);
+    return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::unlockBuffer()
+  {
+    endIndex_lock_.unlock();
+    startIndex_lock_.unlock();
     return PROCESS_SUCCESS;
   }
 
@@ -202,6 +349,27 @@ namespace  dawn
   {
     ///@todo Compare index block content and decide to whether move start index.
     return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::checkIndexValid(uint32_t index)
+  {
+    auto correctedIndex = calculateIndex(index);
+    if (ringBuffer_raw_ptr_->startIndex_ != SHM_INVALID_INDEX && ringBuffer_raw_ptr_->endIndex_ != SHM_INVALID_INDEX)
+    {
+      if (ringBuffer_raw_ptr_->startIndex_ < ringBuffer_raw_ptr_->endIndex_ && ringBuffer_raw_ptr_->startIndex_ <= correctedIndex && correctedIndex < ringBuffer_raw_ptr_->endIndex_)
+      {
+        return true;
+      }
+      else if (ringBuffer_raw_ptr_->startIndex_ > ringBuffer_raw_ptr_->endIndex_ && (ringBuffer_raw_ptr_->startIndex_ <= correctedIndex || correctedIndex < ringBuffer_raw_ptr_->endIndex_))
+      {
+        return true;
+      }
+      else
+      {
+        return false;
+      }
+    }
+    return false;
   }
 
   uint32_t shmIndexRingBuffer::calculateIndex(uint32_t ringBufferIndex)
@@ -306,50 +474,6 @@ namespace  dawn
     return true;
   }
 
-  struct shmTransport::shmTransportImpl
-  {
-    shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr);
-    ~shmTransportImpl() = default;
-    bool write(const void *write_data, const uint32_t data_len);
-    bool read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type);
-    bool wait();
-
-    protected:
-    bool publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp);
-
-    /// @brief Read the latest index block from ring buffer and will lock ring buffer.
-    ///        Need to use unlockRingBuffer() to unlock end index of ring buffer.
-    /// @param block 
-    /// @return PROCESS_SUCCESS if read index block successfully and will lock end index, otherwise return PROCESS_FAIL.
-    bool subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block);
-
-    /// @brief Unlock end index of ring buffer.
-    /// @return
-    void unlockRingBuffer();
-
-    /// @brief Get a microsecond timestamp.
-    ///         !!!WARN!!! This timestamp will be truncated to 32 bits.
-    /// @return microsecond timestamp.
-    uint32_t  getTimestamp();
-
-    std::vector<uint32_t> retryRequireMsgShm(uint32_t data_size);
-
-    bool recycleMsg(uint32_t msgIndex);
-
-    bool recycleExpireMsg();
-
-    bool read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize);
-
-    protected:
-    std::string           identity_;
-    void                  *msgShm_raw_ptr_;
-    volatile bool         lockMsgFlag_;
-    std::shared_ptr<shmChannel>            channel_ptr_;
-    std::shared_ptr<shmMsgPool>            shmPool_ptr_;
-    std::shared_ptr<shmIndexRingBuffer>    ringBuffer_ptr_;
-    std::shared_ptr<qosController>         qosController_ptr_;
-  };
-
   shmTransport::shmTransport()
   {
   }
@@ -360,23 +484,38 @@ namespace  dawn
 
   shmTransport::shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
+    auto impl = std::make_unique<shmTransportImpl>(identity);
+    if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::EFFICIENT)
+    {
+      tpController_ptr_ = std::make_unique<efficientTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
+    else if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::RELIABLE)
+    {
+      tpController_ptr_ = std::make_unique<reliableTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
   }
 
   void shmTransport::initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr)
   {
-    impl_ = std::make_unique<shmTransportImpl>(identity, qosCfg_ptr);
+    auto impl = std::make_unique<shmTransportImpl>(identity);
+    if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::EFFICIENT)
+    {
+      tpController_ptr_ = std::make_unique<efficientTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
+    else if (qosCfg_ptr->qosType_ == qosCfg::QOS_TYPE::RELIABLE)
+    {
+      tpController_ptr_ = std::make_unique<reliableTpController_shm>(std::move(impl), *qosCfg_ptr);
+    }
   }
-
 
   bool shmTransport::write(const void *write_data, const uint32_t data_len)
   {
-    return impl_->write(write_data, data_len);
+    return tpController_ptr_->write(write_data, data_len);
   }
 
-  bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
+  bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
-    return impl_->read(read_data, data_len, block_type);
+    return tpController_ptr_->read(read_data, data_len, block_type);
   }
 
   bool shmTransport::wait()
@@ -384,261 +523,9 @@ namespace  dawn
     return PROCESS_SUCCESS;
   }
 
-  shmTransport::shmTransportImpl::shmTransportImpl(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr):
-    identity_(identity)
-  {
-    channel_ptr_ = std::make_shared<shmChannel>(CHANNEL_PREFIX + identity_);
-    shmPool_ptr_ = std::make_shared<shmMsgPool>();
-    ringBuffer_ptr_ = std::make_shared<shmIndexRingBuffer>(RING_BUFFER_PREFIX + identity_);
-    msgShm_raw_ptr_ = shmPool_ptr_->getMsgRawBuffer();
-    qosController_ptr_ = std::shared_ptr<qosController>(dynamic_cast<qosController*>(new efficientQosController_shm(*(qosCfg_ptr.get()))));
-  }
-
-  bool shmTransport::shmTransportImpl::write(const void *write_data, const uint32_t data_len)
-  {
-    auto msg_vec = retryRequireMsgShm(data_len);
-
-    if (msg_vec.size() == 0)
-    {
-      LOG_ERROR("can not allocate enough shm");
-      return PROCESS_FAIL;
-    }
-
-    msgType   *prev_msg = nullptr;
-    uint32_t written_len = 0;
-    auto wait2writeLen = data_len;
-    for (auto msgIndex : msg_vec)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = new(msgBlock) msgType;
-      if (wait2writeLen <= SHM_BLOCK_CONTENT_SIZE)
-      {
-        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, wait2writeLen);
-      }
-      else
-      {
-        std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, SHM_BLOCK_CONTENT_SIZE);
-        wait2writeLen -= SHM_BLOCK_CONTENT_SIZE;
-        written_len += SHM_BLOCK_CONTENT_SIZE;
-      }
-
-      if (prev_msg != nullptr)
-      {
-        prev_msg->next_ = msgIndex;
-        prev_msg = msgBlockIns;
-      }
-      else
-      {
-        prev_msg = msgBlockIns;
-      }
-    }
-
-    if (publishMsg(msg_vec[0], data_len, getTimestamp()) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-
-    channel_ptr_->notifyAll();
-
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, BLOCK_TYPE block_type)
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-
-    //Try to get the latest index block to taste.
-    if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-    {
-      if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
-      {
-        qosController_ptr_->updateLatestMsg(&block);
-        auto result = read(read_data, data_len, block.shmMsgIndex_, block.msgSize_);
-        unlockRingBuffer();
-        return result;
-      }
-      else
-      {
-        unlockRingBuffer();
-      }
-    }
-
-    auto subscribeMsg_func = [&block, this, &read_data, &data_len]() {
-      bool result = false;
-      if (subscribeMsgAndLock(block) == PROCESS_SUCCESS)
-      {
-        if (qosController_ptr_->tasteMsgType(&block) == qosController::MSG_FRESHNESS::FRESH)
-        {
-          qosController_ptr_->updateLatestMsg(&block);
-          if (read(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
-          {
-            result = true;
-          }
-        }
-        unlockRingBuffer();
-      }
-      return result;
-    };
-
-    //Block until message arrival
-    if (block_type == BLOCK_TYPE::BLOCK)
-    {
-      channel_ptr_->waitNotify(subscribeMsg_func);
-      return PROCESS_SUCCESS;
-    }
-    else
-    {
-      auto result = channel_ptr_->tryWaitNotify();
-      if (result == false)
-      {
-        return PROCESS_FAIL;
-      }
-    }
-
-    return PROCESS_FAIL;
-  }
-
-  bool shmTransport::shmTransportImpl::publishMsg(uint32_t msgIndex, uint32_t msgSize, uint32_t timeStamp)
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType ringBufferBlock;
-    uint32_t      storePosition;
-    ringBufferBlock.shmMsgIndex_ = msgIndex;
-    ringBufferBlock.msgSize_ = msgSize;
-    ringBufferBlock.timeStamp_ = timeStamp;
-    auto result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
-
-    if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
-    {
-      LOG_ERROR("can not write to ring buffer");
-      return PROCESS_FAIL;
-    }
-    else if (result == shmIndexRingBuffer::PROCESS_RESULT::BUFFER_FILL)
-    {
-      //Best effort to publish the message.
-      recycleExpireMsg();
-      result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
-      if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
-      {
-        LOG_ERROR("can not write to ring buffer");
-        return PROCESS_FAIL;
-      }
-      return PROCESS_SUCCESS;
-    }
-    else
-    {
-      LOG_DEBUG("shm publish successfully");
-      ///@todo record the latest message
-      return PROCESS_SUCCESS;
-    }
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::subscribeMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
-  {
-    if (ringBuffer_ptr_->watchRingBuffer(block) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-    else
-    {
-      lockMsgFlag_ = true;
-      return PROCESS_SUCCESS;
-    }
-  }
-
-  void shmTransport::shmTransportImpl::unlockRingBuffer()
-  {
-    if (lockMsgFlag_ == true)
-    {
-      ringBuffer_ptr_->stopWatchRingBuffer();
-      lockMsgFlag_ = false;
-    }
-  }
-
-  uint32_t  shmTransport::shmTransportImpl::getTimestamp()
+  uint32_t  getTimestamp()
   {
     using namespace std::chrono;
     return duration_cast<microseconds>(high_resolution_clock::now().time_since_epoch()).count();
   }
-
-
-  std::vector<uint32_t> shmTransport::shmTransportImpl::retryRequireMsgShm(uint32_t data_size)
-  {
-    int retryTime = 3;
-    for (int i = 0; i < retryTime; i++)
-    {
-      try
-      {
-        auto msg_vec = shmPool_ptr_->requireMsgShm(data_size);
-        return msg_vec;
-      }
-      catch (const std::exception& e)
-      {
-        LOG_ERROR("message shm pool is too low");
-        recycleExpireMsg();
-      }
-    }
-    return std::vector<uint32_t>{};
-  }
-
-  bool shmTransport::shmTransportImpl::recycleMsg(uint32_t msgIndex)
-  {
-    assert(msgIndex < SHM_BLOCK_NUM && "msg shm index is out of range");
-    for (;msgIndex != SHM_INVALID_INDEX;)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
-      auto nextIndex = msgBlockIns->next_;
-      shmPool_ptr_->recycleMsgShm(msgIndex);
-      msgIndex = nextIndex;
-    }
-    return PROCESS_SUCCESS;
-  }
-
-  bool shmTransport::shmTransportImpl::recycleExpireMsg()
-  {
-    shmIndexRingBuffer::ringBufferIndexBlockType block;
-    if (ringBuffer_ptr_->moveStartIndex(block) == PROCESS_FAIL)
-    {
-      return PROCESS_FAIL;
-    }
-
-    return recycleMsg(block.shmMsgIndex_);
-  }
-
-  bool shmTransport::shmTransportImpl::read(void *read_data, uint32_t &data_len, uint32_t msgHeadIndex, uint32_t msgSize)
-  {
-    auto msgIndex = msgHeadIndex;
-    data_len = 0;
-    if (msgIndex == SHM_INVALID_INDEX || msgSize == 0)
-    {
-      return PROCESS_FAIL;
-    }
-
-    for (;msgIndex != SHM_INVALID_INDEX;)
-    {
-      auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
-      auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
-
-      if ((msgSize - data_len) < SHM_BLOCK_CONTENT_SIZE)
-      {
-        std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, (msgSize - data_len));
-        data_len += (msgSize - data_len);
-      }
-      else
-      {
-        std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, SHM_BLOCK_CONTENT_SIZE);
-        data_len += SHM_BLOCK_CONTENT_SIZE;
-      }
-      msgIndex = msgBlockIns->next_;
-    }
-
-    if (data_len == msgSize)
-    {
-      return PROCESS_SUCCESS;
-    }
-    LOG_WARN("message size is truncated {}, actual size {}", data_len, msgSize);
-    return PROCESS_FAIL;
-  }
-
 }
