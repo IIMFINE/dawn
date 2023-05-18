@@ -55,6 +55,9 @@ namespace dawn
   struct interprocessMechanism
   {
     interprocessMechanism() = default;
+    /// @brief Provide a mechanism to share mutex, condition, semaphore, etc.
+    ///        *WARN*  But exclude message queue, shared memory.
+    /// @param identity The identity for boost interprocess mechanism.
     interprocessMechanism(std::string_view   identity);
     ~interprocessMechanism() = default;
     void initialize(std::string_view identity);
@@ -254,7 +257,6 @@ namespace dawn
     /// @return 
     uint32_t calculateLastIndex(uint32_t ringBufferIndex);
 
-    std::shared_ptr<BI::named_semaphore>            ringBufferInitialFlag_ptr_;
     std::shared_ptr<interprocessMechanism<IPC_t>>   ipc_ptr_;
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
@@ -309,6 +311,8 @@ namespace dawn
     shmTransport();
     shmTransport(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
     ~shmTransport();
+    shmTransport(const shmTransport&) = delete;
+    shmTransport& operator=(const shmTransport&) = delete;
     void initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
 
     virtual bool write(const void *write_data, const uint32_t data_len) override;

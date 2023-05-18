@@ -62,14 +62,14 @@ namespace dawn
     bool updateStartMsgAndIndex(shmIndexRingBuffer::ringBufferIndexBlockType &msg, uint32_t ringBufferIndex);
 
     /// @brief Update stay index.
-    /// @param updatedIndex Tell the caller the updated stay index.
+    /// @param updatedIndex Return the caller the updated stay index.
     /// @param ringBufferIndex If ringBufferIndex is SHM_INVALID_INDEX, then stayIndex_ will be added by 1.
     ///                        Otherwise, stayIndex_ will be updated by ringBufferIndex.
     /// @return PROCESS_SUCCESS if the stay index is updated successfully, otherwise return PROCESS_FAILED.
     bool updateStayIndex(uint32_t &updatedIndex, uint32_t ringBufferIndex);
 
     /// @brief Update stay index.
-    /// @param updatedIndex Tell the caller the updated stay index.
+    /// @param updatedIndex Return the caller the updated stay index.
     /// @param ringBufferIndex If ringBufferIndex is SHM_INVALID_INDEX, then stayIndex_ will be added by 1.
     ///                        Otherwise, stayIndex_ will be updated by ringBufferIndex.
     /// @return PROCESS_SUCCESS if the stay index is updated successfully, otherwise return PROCESS_FAILED.
