@@ -21,7 +21,15 @@ namespace dawn
     /// @return 
     virtual bool initialize(std::any config) override;
     virtual bool write(const void *write_data, const uint32_t data_len) override;
+
+    /// @brief Read data efficiently. Support multi-thread read.
+    ///        Property: thread safe.
+    /// @param read_data pointer to store data.
+    /// @param data_len reference to pass read data length.
+    /// @param block_type BLOCK or NON_BLOCK read
+    /// @return PROCESS_SUCCESS if read data successfully, otherwise return PROCESS_FAILED.
     virtual bool read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type) override;
+
     virtual qosCfg::QOS_TYPE getQosType() override;
 
     /// @brief deliver a message pointer.Using std::any to implement polymorphism.
@@ -52,7 +60,18 @@ namespace dawn
     /// @param ringBuffer_ 
     /// @return 
     virtual bool initialize(std::any config) override;
+    /// @brief Write data reliably.
+    ///        Property: thread safe.
+    /// @param write_data Data to be sent.
+    /// @param data_len data length.
+    /// @return PROCESS_SUCCESS if write data successfully, otherwise return PROCESS_FAILED.
     virtual bool write(const void *write_data, const uint32_t data_len) override;
+    /// @brief Read data reliably.
+    ///        Property: thread safe.
+    /// @param read_data Data to be store.
+    /// @param data_len data length.
+    /// @param block_type Blocking or non-blocking read.
+    /// @return PROCESS_SUCCESS if read data successfully, otherwise return PROCESS_FAILED.
     virtual bool read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type) override;
     virtual qosCfg::QOS_TYPE getQosType() override;
 

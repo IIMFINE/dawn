@@ -92,7 +92,7 @@ namespace  dawn
 
   bool shmIndexRingBuffer::moveStartIndex(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_sharable_mutex>    startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
     {
@@ -124,7 +124,7 @@ namespace  dawn
 
   shmIndexRingBuffer::PROCESS_RESULT shmIndexRingBuffer::moveEndIndex(ringBufferIndexBlockType &indexBlock, uint32_t &storePosition)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_sharable_mutex>    endIndexLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
 
     /// @note Accurate time stamp must be get after locked.
     indexBlock.timeStamp_ = getTimestamp();
@@ -135,6 +135,7 @@ namespace  dawn
       ringBuffer_raw_ptr_->endIndex_ = 0;
       ringBuffer_raw_ptr_->startIndex_ = 0;
       std::memcpy(&ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->endIndex_], &indexBlock, sizeof(ringBufferIndexBlockType));
+      storePosition = ringBuffer_raw_ptr_->endIndex_;
       ringBuffer_raw_ptr_->endIndex_ = calculateIndex(ringBuffer_raw_ptr_->endIndex_ + 1);
       return PROCESS_RESULT::SUCCESS;
     }
@@ -161,30 +162,14 @@ namespace  dawn
     return PROCESS_RESULT::FAIL;
   }
 
-  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock)
+  bool shmIndexRingBuffer::getStartBuffer(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
-    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
-    {
-      return PROCESS_FAIL;
-    }
-    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
-    {
-      LOG_WARN("ring buffer is empty");
-      return PROCESS_FAIL;
-    }
-    else
-    {
-      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
-      startIndex_lock_ = std::move(startIndexLock);
-      return PROCESS_SUCCESS;
-    }
-    return PROCESS_FAIL;
+    uint32_t index;
+    return getStartBuffer(indexBlock, index);
   }
 
-  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
+  bool shmIndexRingBuffer::getStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
     {
       return PROCESS_FAIL;
@@ -198,7 +183,99 @@ namespace  dawn
     {
       std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
       index = ringBuffer_raw_ptr_->startIndex_;
-      startIndex_lock_ = std::move(startIndexLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::getLatestBuffer(ringBufferIndexBlockType &indexBlock)
+  {
+    uint32_t index;
+    return getLatestBuffer(indexBlock, index);
+  }
+
+  bool shmIndexRingBuffer::getLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
+  {
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateLastIndex(ringBuffer_raw_ptr_->endIndex_)], sizeof(ringBufferIndexBlockType));
+      index = calculateLastIndex(ringBuffer_raw_ptr_->endIndex_);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::getSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock)
+  {
+    if (checkIndexValid(index) == PROCESS_FAIL)
+    {
+      return PROCESS_FAIL;
+    }
+
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateIndex(index)], sizeof(ringBufferIndexBlockType));
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock)
+  {
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
+      startIndex_shared_lock_ = std::move(startIndexLock);
+      return PROCESS_SUCCESS;
+    }
+    return PROCESS_FAIL;
+  }
+
+  bool shmIndexRingBuffer::watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
+  {
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
+    {
+      return PROCESS_FAIL;
+    }
+    else if (ringBuffer_raw_ptr_->endIndex_ == ringBuffer_raw_ptr_->startIndex_)
+    {
+      LOG_WARN("ring buffer is empty");
+      return PROCESS_FAIL;
+    }
+    else
+    {
+      std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[ringBuffer_raw_ptr_->startIndex_], sizeof(ringBufferIndexBlockType));
+      index = ringBuffer_raw_ptr_->startIndex_;
+      startIndex_shared_lock_ = std::move(startIndexLock);
       return PROCESS_SUCCESS;
     }
     return PROCESS_FAIL;
@@ -206,10 +283,10 @@ namespace  dawn
 
   bool shmIndexRingBuffer::watchLatestBuffer(ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
     ///@note Lock start index prevent other process move start index overlap end index.
     ///     It will cause ring buffer is empty, but still to read content.
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
@@ -223,8 +300,8 @@ namespace  dawn
     else
     {
       std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateLastIndex(ringBuffer_raw_ptr_->endIndex_)], sizeof(ringBufferIndexBlockType));
-      endIndex_lock_ = std::move(endLock);
-      startIndex_lock_ = std::move(startLock);
+      endIndex_shared_lock_ = std::move(endLock);
+      startIndex_shared_lock_ = std::move(startLock);
       return PROCESS_SUCCESS;
     }
     return PROCESS_FAIL;
@@ -232,10 +309,10 @@ namespace  dawn
 
   bool shmIndexRingBuffer::watchLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
     ///@note Lock start index prevent other process move start index overlap end index.
     ///     It will cause ring buffer is empty, but still to read content.
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX)
     {
@@ -250,8 +327,8 @@ namespace  dawn
     {
       std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateLastIndex(ringBuffer_raw_ptr_->endIndex_)], sizeof(ringBufferIndexBlockType));
       index = calculateLastIndex(ringBuffer_raw_ptr_->endIndex_);
-      endIndex_lock_ = std::move(endLock);
-      startIndex_lock_ = std::move(startLock);
+      endIndex_shared_lock_ = std::move(endLock);
+      startIndex_shared_lock_ = std::move(startLock);
       return PROCESS_SUCCESS;
     }
     return PROCESS_FAIL;
@@ -259,27 +336,27 @@ namespace  dawn
 
   bool shmIndexRingBuffer::stopWatchSpecificIndexBuffer()
   {
-    startIndex_lock_.unlock();
-    endIndex_lock_.unlock();
+    startIndex_shared_lock_.unlock();
+    endIndex_shared_lock_.unlock();
     return PROCESS_SUCCESS;
   }
 
   bool shmIndexRingBuffer::stopWatchStartIndex()
   {
-    startIndex_lock_.unlock();
+    startIndex_shared_lock_.unlock();
     return PROCESS_SUCCESS;
   }
 
   bool shmIndexRingBuffer::stopWatchLatestBuffer()
   {
-    startIndex_lock_.unlock();
-    endIndex_lock_.unlock();
+    startIndex_shared_lock_.unlock();
+    endIndex_shared_lock_.unlock();
     return PROCESS_SUCCESS;
   }
 
   bool  shmIndexRingBuffer::getStartIndex(uint32_t &storeIndex, ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startIndexLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
     if (ringBuffer_raw_ptr_->endIndex_ == SHM_INVALID_INDEX || ringBuffer_raw_ptr_->startIndex_ == SHM_INVALID_INDEX)
     {
       return PROCESS_FAIL;
@@ -300,10 +377,10 @@ namespace  dawn
 
   bool shmIndexRingBuffer::watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock)
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
     ///@note Lock start index prevent other process move start index overlap end index.
     ///     It will cause ring buffer is empty, but still to read content.
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
 
     if (checkIndexValid(index) == PROCESS_FAIL)
     {
@@ -322,26 +399,43 @@ namespace  dawn
     else
     {
       std::memcpy(&indexBlock, &ringBuffer_raw_ptr_->ringBufferBlock_[calculateIndex(index)], sizeof(ringBufferIndexBlockType));
-      endIndex_lock_ = std::move(endLock);
-      startIndex_lock_ = std::move(startLock);
+      endIndex_shared_lock_ = std::move(endLock);
+      startIndex_shared_lock_ = std::move(startLock);
+
       return PROCESS_SUCCESS;
     }
     return PROCESS_FAIL;
   }
 
-  bool shmIndexRingBuffer::lockBuffer()
+  bool shmIndexRingBuffer::exclusiveLockBuffer()
   {
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
-    BI::scoped_lock<BI::interprocess_recursive_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
-    endIndex_lock_ = std::move(endLock);
-    startIndex_lock_ = std::move(startLock);
+    BI::scoped_lock<BI::interprocess_sharable_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::scoped_lock<BI::interprocess_sharable_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    endIndex_exclusive_lock_ = std::move(endLock);
+    startIndex_exclusive_lock_ = std::move(startLock);
     return PROCESS_SUCCESS;
   }
 
-  bool shmIndexRingBuffer::unlockBuffer()
+  bool shmIndexRingBuffer::exclusiveUnlockBuffer()
   {
-    endIndex_lock_.unlock();
-    startIndex_lock_.unlock();
+    endIndex_exclusive_lock_.unlock();
+    startIndex_exclusive_lock_.unlock();
+    return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::sharedLockBuffer()
+  {
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       endLock(ipc_ptr_->mechanism_raw_ptr_->endIndex_mutex_);
+    BI::sharable_lock<BI::interprocess_sharable_mutex>       startLock(ipc_ptr_->mechanism_raw_ptr_->startIndex_mutex_);
+    endIndex_shared_lock_ = std::move(endLock);
+    startIndex_shared_lock_ = std::move(startLock);
+    return PROCESS_SUCCESS;
+  }
+
+  bool shmIndexRingBuffer::sharedUnlockBuffer()
+  {
+    endIndex_shared_lock_.unlock();
+    startIndex_shared_lock_.unlock();
     return PROCESS_SUCCESS;
   }
 
@@ -516,6 +610,11 @@ namespace  dawn
   bool shmTransport::read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type)
   {
     return tpController_ptr_->read(read_data, data_len, block_type);
+  }
+
+  bool shmTransport::read(void *read_data, uint32_t &data_len)
+  {
+    return tpController_ptr_->read(read_data, data_len, BLOCKING_TYPE::BLOCK);
   }
 
   bool shmTransport::wait()
