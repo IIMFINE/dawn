@@ -11,9 +11,10 @@
 #include <boost/interprocess/sync/interprocess_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_recursive_mutex.hpp>
 #include <boost/interprocess/sync/interprocess_semaphore.hpp>
-
+#include <boost/interprocess/sync/sharable_lock.hpp>
 #include <boost/interprocess/sync/named_condition.hpp>
 #include <boost/interprocess/sync/named_mutex.hpp>
+#include <boost/interprocess/sync/interprocess_sharable_mutex.hpp>
 #include <boost/interprocess/sync/named_semaphore.hpp>
 #include <boost/interprocess/ipc/message_queue.hpp>
 
@@ -161,12 +162,12 @@ namespace dawn
       {
       }
       ~IPC_t() = default;
-      BI::interprocess_recursive_mutex             startIndex_mutex_;
-      BI::interprocess_recursive_mutex             endIndex_mutex_;
+      BI::interprocess_sharable_mutex             startIndex_mutex_;
+      BI::interprocess_sharable_mutex             endIndex_mutex_;
       BI::interprocess_semaphore         ringBufferInitializedFlag_;
     };
 
-    shmIndexRingBuffer();
+    shmIndexRingBuffer() = default;
     shmIndexRingBuffer(std::string_view identity);
     ~shmIndexRingBuffer() = default;
     void initialize(std::string_view identity);
@@ -181,6 +182,16 @@ namespace dawn
     /// @return PROCESS_RESULT
     PROCESS_RESULT moveEndIndex(ringBufferIndexBlockType &indexBlock, uint32_t &storePosition);
 
+    bool getStartBuffer(ringBufferIndexBlockType &indexBlock);
+
+    bool getStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
+    bool getLatestBuffer(ringBufferIndexBlockType &indexBlock);
+
+    bool getLatestBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
+
+    bool getSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock);
+
     /// @brief Watch start index and lock start index mutex until operation finish.
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
@@ -190,7 +201,6 @@ namespace dawn
     /// @param indexBlock 
     /// @return PROCESS_SUCCESS: lock successfully and read ring buffer in start index.
     bool watchStartBuffer(ringBufferIndexBlockType &indexBlock, uint32_t &index);
-
 
     /// @brief Watch end index and lock end index mutex until watch operation asked to stop.
     /// @param indexBlock 
@@ -229,13 +239,21 @@ namespace dawn
     ///         PROCESS_FAIL: index is invalid or buffer isn't initialize and will not lock.
     bool watchSpecificIndexBuffer(uint32_t index, ringBufferIndexBlockType &indexBlock);
 
-    /// @brief Lock start index mutex and end index mutex.
+    /// @brief Exclusively lock start index mutex and end index mutex.
     /// @return PROCESS_SUCCESS: lock successfully.
-    bool lockBuffer();
+    bool exclusiveLockBuffer();
 
     /// @brief Unlock start index mutex and end index mutex.
     /// @return PROCESS_SUCCESS: unlock successfully.
-    bool unlockBuffer();
+    bool exclusiveUnlockBuffer();
+
+    /// @brief sharable lock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: lock successfully.
+    bool sharedLockBuffer();
+
+    /// @brief sharable unlock start index mutex and end index mutex.
+    /// @return PROCESS_SUCCESS: unlock successfully.
+    bool sharedUnlockBuffer();
 
     /// @brief Pass indexBlock to compare the the block pointing by start index. If they are same, start index will move.
     /// @param indexBlock 
@@ -260,8 +278,10 @@ namespace dawn
     std::shared_ptr<interprocessMechanism<IPC_t>>   ipc_ptr_;
     std::shared_ptr<BI::shared_memory_object>       ringBufferShm_ptr_;
     std::shared_ptr<BI::mapped_region>              ringBufferShmRegion_ptr_;
-    BI::scoped_lock<BI::interprocess_recursive_mutex>         endIndex_lock_;
-    BI::scoped_lock<BI::interprocess_recursive_mutex>         startIndex_lock_;
+    BI::sharable_lock<BI::interprocess_sharable_mutex>         endIndex_shared_lock_;
+    BI::sharable_lock<BI::interprocess_sharable_mutex>         startIndex_shared_lock_;
+    BI::scoped_lock<BI::interprocess_sharable_mutex>         endIndex_exclusive_lock_;
+    BI::scoped_lock<BI::interprocess_sharable_mutex>         startIndex_exclusive_lock_;
 
     ringBufferType                                  *ringBuffer_raw_ptr_;
     std::string                                     shmIdentity_;
@@ -315,8 +335,23 @@ namespace dawn
     shmTransport& operator=(const shmTransport&) = delete;
     void initialize(std::string_view identity, std::shared_ptr<qosCfg> qosCfg_ptr = std::make_shared<qosCfg>());
 
+    /// @brief Write data to shared memory.
+    /// @param write_data data
+    /// @param data_len data length
+    /// @return PROCESS_SUCCESS: write successfully. Otherwise, write fail.
     virtual bool write(const void *write_data, const uint32_t data_len) override;
 
+    /// @brief Read data from shared memory. It is a blocking read function.
+    /// @param read_data read data buffer
+    /// @param data_len read data length
+    /// @return PROCESS_SUCCESS: read successfully. Otherwise, read fail.
+    virtual bool read(void *read_data, uint32_t &data_len) override;
+
+    /// @brief Read data from shared memory. It can choose blocking or non-blocking.
+    /// @param read_data read data buffer
+    /// @param data_len read data length
+    /// @param block_type blocking or non-blocking
+    /// @return PROCESS_SUCCESS: read successfully. Otherwise, read fail.
     virtual bool read(void *read_data, uint32_t &data_len, BLOCKING_TYPE block_type) override;
 
     virtual bool wait() override;

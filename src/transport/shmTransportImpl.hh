@@ -12,7 +12,8 @@ namespace dawn
     friend struct efficientTpController_shm;
     friend struct reliableTpController_shm;
     shmTransportImpl(std::string_view identity) :
-      identity_(identity)
+      identity_(identity),
+      lockMsgOwns_(0)
     {
       channel_ptr_ = std::make_shared<shmChannel>(CHANNEL_PREFIX + identity_);
       shmPool_ptr_ = std::make_shared<shmMsgPool>();
@@ -23,7 +24,7 @@ namespace dawn
     ~shmTransportImpl() = default;
 
     /// @brief Write data to data space.
-    ///       property: thread safe
+    ///        Property: thread safe
     /// @param write_data
     /// @param data_len
     /// @return 
@@ -90,13 +91,13 @@ namespace dawn
       auto subscribeLatestMsg_func = [this, &read_data, &data_len]() {
         shmIndexRingBuffer::ringBufferIndexBlockType block;
         bool result = false;
-        if (subscribeLatestMsgAndLock(block) == PROCESS_SUCCESS)
+        if (subscribeLatestMsgAndSharableLock(block) == PROCESS_SUCCESS)
         {
           if (readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
           {
             result = true;
           }
-          unlockRingBuffer();
+          stopWatchRingBuffer();
         }
         return result;
       };
@@ -158,7 +159,6 @@ namespace dawn
       ringBufferBlock.shmMsgIndex_ = msgIndex;
       ringBufferBlock.msgSize_ = msgSize;
       auto result = ringBuffer_ptr_->moveEndIndex(ringBufferBlock, storePosition);
-
       if (result == shmIndexRingBuffer::PROCESS_RESULT::FAIL)
       {
         LOG_ERROR("can not write to ring buffer");
@@ -185,21 +185,22 @@ namespace dawn
       return PROCESS_SUCCESS;
     }
 
-    /// @brief Read the latest index block from ring buffer and will lock ring buffer.
+    /// @brief Read the latest index block from ring buffer and will shared lock ring buffer.
     ///        Need to use unlockRingBuffer() to unlock end index of ring buffer.
     /// @param block 
     /// @return PROCESS_SUCCESS if read index block successfully and will lock end index, otherwise return PROCESS_FAIL.
-    bool subscribeLatestMsgAndLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
+    bool subscribeLatestMsgAndSharableLock(shmIndexRingBuffer::ringBufferIndexBlockType &block)
     {
-      if (ringBuffer_ptr_->watchLatestBuffer(block) == PROCESS_FAIL)
+      if (watchRingBuffer() == PROCESS_SUCCESS)
       {
-        return PROCESS_FAIL;
-      }
-      else
-      {
-        lockMsgFlag_ = true;
+        if (ringBuffer_ptr_->getLatestBuffer(block) == PROCESS_FAIL)
+        {
+          stopWatchRingBuffer();
+          return PROCESS_FAIL;
+        }
         return PROCESS_SUCCESS;
       }
+      return PROCESS_FAIL;
     }
 
     bool checkMsgIndexValid(uint32_t msgIndex)
@@ -207,24 +208,45 @@ namespace dawn
       return ringBuffer_ptr_->checkIndexValid(msgIndex);
     }
 
-    bool lockRingBuffer()
+    /// @brief shared lock ring buffer.
+    /// @return PROCESS_SUCCESS if lock ring buffer successfully, otherwise return PROCESS_FAIL.
+    bool watchRingBuffer()
     {
-      if (lockMsgFlag_ == false)
+      std::unique_lock<std::shared_mutex>     lock(lockMsgMutex_);
+      if (lockMsgOwns_.load(std::memory_order_acquire) == 0)
       {
-        ringBuffer_ptr_->lockBuffer();
-        lockMsgFlag_ = true;
+        if (ringBuffer_ptr_->sharedLockBuffer() == PROCESS_SUCCESS)
+        {
+          lockMsgOwns_++;
+          return PROCESS_SUCCESS;
+        }
+        else
+        {
+          return PROCESS_FAIL;
+        }
       }
-      return PROCESS_SUCCESS;
+      else
+      {
+        lockMsgOwns_++;
+        return PROCESS_SUCCESS;
+      }
     }
 
     /// @brief Unlock end index of ring buffer.
-    /// @return
-    void unlockRingBuffer()
+    /// @return void
+    void stopWatchRingBuffer()
     {
-      if (lockMsgFlag_ == true)
+      std::unique_lock<std::shared_mutex>     lock(lockMsgMutex_);
+      if (lockMsgOwns_.load(std::memory_order_acquire) == 1)
       {
-        ringBuffer_ptr_->stopWatchLatestBuffer();
-        lockMsgFlag_ = false;
+        if (ringBuffer_ptr_->sharedUnlockBuffer() == PROCESS_SUCCESS)
+        {
+          lockMsgOwns_--;
+        }
+      }
+      else
+      {
+        lockMsgOwns_--;
       }
     }
 
@@ -319,7 +341,8 @@ namespace dawn
     protected:
     std::string           identity_;
     void                  *msgShm_raw_ptr_;
-    volatile bool         lockMsgFlag_;
+    std::atomic<uint32_t>         lockMsgOwns_;
+    std::shared_mutex             lockMsgMutex_;
     std::shared_ptr<shmChannel>            channel_ptr_;
     std::shared_ptr<shmMsgPool>            shmPool_ptr_;
     std::shared_ptr<shmIndexRingBuffer>    ringBuffer_ptr_;

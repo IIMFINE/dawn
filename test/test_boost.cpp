@@ -14,8 +14,12 @@
 #include <boost/interprocess/sync/sharable_lock.hpp>
 #include <boost/interprocess/sync/upgradable_lock.hpp>
 #include <boost/interprocess/sync/named_recursive_mutex.hpp>
+#include <boost/interprocess/sync/interprocess_sharable_mutex.hpp>
+#include <boost/interprocess/sync/named_sharable_mutex.hpp>
 
 #include <signal.h>
+#include "test_helper.h"
+
 TEST(test_core_dump, test_core_dump)
 {
   raise(SIGABRT);
@@ -106,6 +110,12 @@ TEST(test_boost, test_upgradable_mutex_shared1)
   std::cout << "try to lock sharable" << std::endl;
   upgradable_mut.lock_sharable();
   std::cout << "end " << std::endl;
+  std::cout << "try to lock sharable" << std::endl;
+  upgradable_mut.lock_sharable();
+  std::cout << "end " << std::endl;
+  std::cout << "try to lock sharable" << std::endl;
+  upgradable_mut.lock_sharable();
+  std::cout << "end " << std::endl;
   while (1)
   {
     std::this_thread::yield();
@@ -157,6 +167,117 @@ TEST(test_boost, test_sharable_lock)
   }
 }
 
+TEST(test_boost, test_sharable_lock_multi_thread)
+{
+  using namespace BI;
+  named_upgradable_mutex upgradable_mut(open_or_create, "hello_world_dawn");
+  auto func = [&]() {
+    std::cout << "try to lock sharable" << std::endl;
+    upgradable_mut.lock_sharable();
+    std::cout << "lock" << std::endl;
+    while (1)
+    {
+      std::this_thread::yield();
+    }
+  };
+
+  auto future1 = std::async(std::launch::async, func);
+  auto future2 = std::async(std::launch::async, func);
+  auto future3 = std::async(std::launch::async, func);
+  while (1)
+  {
+    /* code */
+    std::this_thread::yield();
+  }
+}
+
+TEST(test_boost, test_shared_mutex_shared_lock)
+{
+  using namespace BI;
+  named_sharable_mutex mut(open_or_create, "hello_world_dawn");
+  std::cout << "try to lock sharable" << std::endl;
+  mut.lock_sharable();
+  std::cout << "lock" << std::endl;
+  std::cout << "try to lock sharable" << std::endl;
+  mut.lock_sharable();
+  std::cout << "lock" << std::endl;
+  std::cout << "try to lock sharable" << std::endl;
+  mut.lock_sharable();
+  std::cout << "lock" << std::endl;
+  mut.unlock_sharable();
+  std::cout << "unlock" << std::endl;
+  while (1)
+  {
+    /* code */
+    std::this_thread::yield();
+  }
+}
+
+TEST(test_boost, test_shared_mutex_lock)
+{
+  using namespace BI;
+  named_sharable_mutex mut(open_or_create, "hello_world_dawn");
+  std::cout << "try to lock " << std::endl;
+  mut.lock();
+  std::cout << "lock" << std::endl;
+  std::cout << "try to lock " << std::endl;
+  while (1)
+  {
+    /* code */
+    std::this_thread::yield();
+  }
+}
+
+TEST(test_boost, test_shared_mutex_shared_lock_recursive)
+{
+  using namespace BI;
+  named_sharable_mutex mut(open_or_create, "hello_world_dawn");
+  uint32_t time = 1000;
+  for (uint32_t i = 0;i < time;i++)
+  {
+    std::cout << "try to lock " << std::endl;
+    sharable_lock<named_sharable_mutex>     lock1(mut);
+    std::cout << "lock" << std::endl;
+    sharable_lock<named_sharable_mutex>     lock2;
+    // lock2 = std::move(lock1);
+    // lock2.swap(lock1);
+    std::cout << "try to lock " << std::endl;
+    sharable_lock<named_sharable_mutex>     lock3(mut);
+    std::cout << "lock" << std::endl;
+    // lock2 = std::move(lock3);
+    // lock2.swap(lock3);
+    // lock2.unlock();
+    std::cout << "unlock" << i << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+  std::cout << "end" << std::endl;
+  while (1)
+  {
+    /* code */
+    std::this_thread::yield();
+  }
+}
+
+TEST(test_boost, test_shared_mutex_scoped_lock)
+{
+  using namespace BI;
+  named_sharable_mutex mut(open_or_create, "hello_world_dawn");
+  uint32_t time = 1000;
+  for (uint32_t i = 0; i < time;i++)
+  {
+    std::cout << "try to lock " << std::endl;
+    scoped_lock<named_sharable_mutex>     lock1(mut);
+    std::cout << "lock" << i << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+  }
+  std::cout << "end" << std::endl;
+  while (1)
+  {
+    /* code */
+    std::this_thread::yield();
+  }
+}
+
 TEST(test_boost, test_upgradable_lock)
 {
   using namespace BI;
@@ -191,6 +312,7 @@ TEST(test_boost, test_scoped_lock_upgradable)
     std::this_thread::yield();
   }
 }
+
 
 struct lock_guard
 {
@@ -381,7 +503,6 @@ TEST(test_boost, test_deadlock_2)
   }
 }
 
-
 TEST(test_boost, test_lock_recurse)
 {
   using namespace BI;
@@ -417,9 +538,25 @@ TEST(test_boost, test_lock_release_twice)
   lock2.unlock();
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  std::cout << "end " << std::endl;
+  std::cout << "unlock twice " << std::endl;
   while (1)
   {
     std::this_thread::yield();
   }
+}
+
+TEST(test_boost, test_shared_lock_cost)
+{
+  using namespace BI;
+  named_sharable_mutex mut(open_or_create, "hello_world_dawn");
+  uint32_t total_time = 100000;
+  for (uint32_t i = 0; i < total_time; ++i)
+  {
+    {
+      dawn::cyclesCounter counter("lock_shared");
+      sharable_lock<named_sharable_mutex> lock2(mut);
+    }
+    total_time += dawn::cyclesCounter::getTimeSpan("lock_shared");
+  }
+  std::cout << "total_time: " << total_time / total_time << std::endl;
 }

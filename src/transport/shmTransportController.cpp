@@ -31,7 +31,8 @@ namespace dawn
     auto  subscribeLatestMsg_func = [this, &read_data, &data_len]() {
       shmIndexRingBuffer::ringBufferIndexBlockType block;
       bool result = false;
-      if (shmImpl_->subscribeLatestMsgAndLock(block) == PROCESS_SUCCESS)
+      std::unique_lock<std::shared_mutex> lock(mutex_);
+      if (shmImpl_->subscribeLatestMsgAndSharableLock(block) == PROCESS_SUCCESS)
       {
         if (tasteMsgType(block) == tpController::MSG_FRESHNESS::FRESH)
         {
@@ -41,7 +42,7 @@ namespace dawn
             result = true;
           }
         }
-        shmImpl_->unlockRingBuffer();
+        shmImpl_->stopWatchRingBuffer();
       }
       return result;
     };
@@ -76,7 +77,6 @@ namespace dawn
 
   tpController::MSG_FRESHNESS efficientTpController_shm::tasteMsgType(shmIndexRingBuffer::ringBufferIndexBlockType &msg)
   {
-    std::shared_lock  lock(mutex_);
 
     if (latestMsg_.timeStamp_ < msg.timeStamp_)
     {
@@ -90,7 +90,6 @@ namespace dawn
 
   bool efficientTpController_shm::updateLatestMsg(shmIndexRingBuffer::ringBufferIndexBlockType  &msg)
   {
-    std::unique_lock lock(mutex_);
     if (std::memcmp(&latestMsg_, &msg, sizeof(shmIndexRingBuffer::ringBufferIndexBlockType)) == 0)
     {
       return PROCESS_SUCCESS;
@@ -130,7 +129,27 @@ namespace dawn
 
   bool reliableTpController_shm::read(void *read_data, uint32_t &data_len, abstractTransport::BLOCKING_TYPE block_type)
   {
-    auto  subscribeLatestMsg_func = [this, &read_data, &data_len]() {
+    bool semaphoreInvokeFlag = false;
+
+    auto  subscribeLatestMsg_func = [this, &read_data, &data_len, &semaphoreInvokeFlag]() {
+      //Solve shared memory latency problem.
+      std::function<void()>   waitValidFunc = [this, &semaphoreInvokeFlag]() {
+        uint32_t waitSharedMemoryValidTime = 20;
+        if (semaphoreInvokeFlag == true)
+        {
+          auto oldIndex = stayIndex_.load(std::memory_order_acquire);
+          if (shmImpl_->checkMsgIndexValid(oldIndex) == true)
+          {
+            return;
+          }
+          LOG_WARN("shared memory don't have valid data, wait for valid data arrival");
+          for (uint32_t i = 0; i < waitSharedMemoryValidTime; i++)
+          {
+            std::this_thread::sleep_for(std::chrono::microseconds(1));
+          }
+        }
+      };
+
       shmIndexRingBuffer::ringBufferIndexBlockType startIndexBlock;
       uint32_t   startIndex;
       bool result = false;
@@ -140,21 +159,21 @@ namespace dawn
         {
           case tpController::MSG_FRESHNESS::NEW_ROUND:
             {
-              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              if (shmImpl_->watchRingBuffer() == PROCESS_SUCCESS)
               {
                 uint32_t     startIndex;
-                if (shmImpl_->ringBuffer_ptr_->watchStartBuffer(startIndexBlock, startIndex) == PROCESS_SUCCESS)
+                if (shmImpl_->ringBuffer_ptr_->getStartBuffer(startIndexBlock, startIndex) == PROCESS_SUCCESS)
                 {
                   if (shmImpl_->readBuffer(read_data, data_len, startIndexBlock.shmMsgIndex_, startIndexBlock.msgSize_) == PROCESS_SUCCESS)
                   {
                     updateStartMsgAndIndex(startIndexBlock, startIndex);
                     updateLastMsg(startIndexBlock);
                     uint32_t msgIndex;
-                    updateStayIndex(msgIndex, startIndex);
+                    updateStayIndex(msgIndex, startIndex + 1);
                     result = true;
                   }
                 }
-                shmImpl_->unlockRingBuffer();
+                shmImpl_->stopWatchRingBuffer();
               }
             }
             break;
@@ -162,13 +181,14 @@ namespace dawn
           case tpController::MSG_FRESHNESS::FRESH:
             {
               updateStartMsgAndIndex(startIndexBlock, startIndex);
-              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              if (shmImpl_->watchRingBuffer() == PROCESS_SUCCESS)
               {
+                waitValidFunc();
                 uint32_t    msgIndex;
                 shmIndexRingBuffer::ringBufferIndexBlockType  block;
                 if (updateStayIndex(msgIndex) == PROCESS_SUCCESS)
                 {
-                  if (shmImpl_->ringBuffer_ptr_->watchSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
+                  if (shmImpl_->ringBuffer_ptr_->getSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
                   {
                     if (shmImpl_->readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
                     {
@@ -177,20 +197,21 @@ namespace dawn
                     }
                   }
                 }
-                shmImpl_->unlockRingBuffer();
+                shmImpl_->stopWatchRingBuffer();
               }
             }
             break;
 
           case tpController::MSG_FRESHNESS::STALE:
             {
-              if (shmImpl_->lockRingBuffer() == PROCESS_SUCCESS)
+              if (shmImpl_->watchRingBuffer() == PROCESS_SUCCESS)
               {
+                waitValidFunc();
                 uint32_t    msgIndex;
                 shmIndexRingBuffer::ringBufferIndexBlockType  block;
                 if (updateStayIndex(msgIndex) == PROCESS_SUCCESS)
                 {
-                  if (shmImpl_->ringBuffer_ptr_->watchSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
+                  if (shmImpl_->ringBuffer_ptr_->getSpecificIndexBuffer(msgIndex, block) == PROCESS_SUCCESS)
                   {
                     if (shmImpl_->readBuffer(read_data, data_len, block.shmMsgIndex_, block.msgSize_) == PROCESS_SUCCESS)
                     {
@@ -199,7 +220,7 @@ namespace dawn
                     }
                   }
                 }
-                shmImpl_->unlockRingBuffer();
+                shmImpl_->stopWatchRingBuffer();
               }
             }
             break;
@@ -216,14 +237,15 @@ namespace dawn
     {
       return PROCESS_SUCCESS;
     }
-
     if (block_type == abstractTransport::BLOCKING_TYPE::BLOCK)
     {
+      semaphoreInvokeFlag = true;
       shmImpl_->channel_ptr_->waitNotify(subscribeLatestMsg_func);
       return PROCESS_SUCCESS;
     }
     else
     {
+      semaphoreInvokeFlag = true;
       auto result = shmImpl_->channel_ptr_->tryWaitNotify(subscribeLatestMsg_func);
       if (result == false)
       {
@@ -317,6 +339,7 @@ namespace dawn
   {
     auto oldIndex = stayIndex_.load(std::memory_order_acquire);
 
+
     if (shmImpl_->checkMsgIndexValid(oldIndex) == false)
     {
       return PROCESS_FAIL;
@@ -324,15 +347,15 @@ namespace dawn
 
     while (stayIndex_.compare_exchange_strong(oldIndex, oldIndex + 1, std::memory_order_acq_rel) == false)
     {
-      if (shmImpl_->checkMsgIndexValid(oldIndex + 1) == true)
+      if (shmImpl_->checkMsgIndexValid(oldIndex) == true)
       {
         continue;
       }
       return PROCESS_FAIL;
     }
-    if (shmImpl_->checkMsgIndexValid(oldIndex + 1) == true)
+    if (shmImpl_->checkMsgIndexValid(oldIndex) == true)
     {
-      updatedIndex = oldIndex + 1;
+      updatedIndex = oldIndex;
       return PROCESS_SUCCESS;
     }
     else

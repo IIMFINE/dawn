@@ -105,159 +105,6 @@ TEST(test_dawn, test_shm_pool)
   std::cout << std::endl;
 }
 
-#include <signal.h>
-
-TEST(test_dawn, test_shmTp_read_loop_block)
-{
-  using namespace dawn;
-  using TP = abstractTransport;
-  shmTransport shm_tp("hello_world_dawn");
-  try
-  {
-    for (;;)
-    {
-      char* data = new char[9 * 1024 * 1024];
-      uint32_t len = 0;
-      if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
-      {
-        std::cout << "failed" << std::endl;
-      }
-      else
-      {
-        LOG_INFO("receive data {}", data);
-        std::cout << "receive data " << data << std::endl;
-        std::cout << "receive data len " << len << std::endl << std::endl;
-      }
-      delete data;
-    }
-  }
-  catch (const std::exception& e)
-  {
-    std::cerr << e.what() << '\n';
-    raise(SIGABRT);
-  }
-
-}
-
-TEST(test_dawn, test_shmTp_read_one_slot_non_block)
-{
-  using namespace dawn;
-  using TP = abstractTransport;
-  shmTransport shm_tp("hello_world_dawn");
-  {
-    char* data = new char[9 * 1024 * 1024];
-    uint32_t len = 0;
-    if (shm_tp.read(data, len, TP::BLOCKING_TYPE::NON_BLOCK) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    else
-    {
-      LOG_INFO("receive data {}", data);
-      std::cout << "receive data " << data << std::endl;
-      std::cout << "len " << len << std::endl;
-    }
-    delete data;
-  }
-}
-
-TEST(test_dawn, test_shmTp_read_one_slot_block)
-{
-  using namespace dawn;
-  using TP = abstractTransport;
-  shmTransport shm_tp("hello_world_dawn");
-  {
-    char* data = new char[9 * 1024 * 1024];
-    uint32_t len = 0;
-    if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    else
-    {
-      LOG_INFO("receive data {}", data);
-      std::cout << "receive data " << data << std::endl;
-      std::cout << "len " << len << std::endl;
-    }
-    delete data;
-  }
-}
-
-TEST(test_dawn, test_shmTp_write_small_data)
-{
-  using namespace dawn;
-  shmTransport shm_tp("hello_world_dawn");
-  auto i = 0;
-  {
-    std::string data = "helloWorld";
-    data += std::to_string(i);
-    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-  }
-}
-
-
-/// @brief publish a 64k bytes data
-/// @param  
-/// @param  
-TEST(test_dawn, test_shmTp_write_large_data)
-{
-  using namespace dawn;
-  SET_LOGGER_FILENAME("write_large_data");
-  shmTransport shm_tp("hello_world_dawn");
-  {
-    std::string data = "helloWorld large data";
-
-    data.resize(64 * 1024);
-
-    std::cout << "publish data " << data << std::endl;
-    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-  }
-}
-
-TEST(test_dawn, test_shmTp_write_large_data_loop)
-{
-  using namespace dawn;
-  SET_LOGGER_FILENAME("publisher");
-  shmTransport shm_tp("hello_world_dawn");
-
-  for (int i = 0; i < 0xffff; i++)
-  {
-    std::string data = "helloWorld large data";
-    data += std::to_string(i);
-    std::cout << "publish data " << data << std::endl;
-    data.resize(64 * 1024);
-    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    LOG_INFO("publish data i {}", i);
-  }
-}
-
-TEST(test_dawn, test_shmTp_write_small_data_loop)
-{
-  using namespace dawn;
-  shmTransport shm_tp("hello_world_dawn");
-  for (int i = 0;; i++)
-  {
-    std::string data = "helloWorld";
-    data += std::to_string(i);
-    std::cout << "publish data " << data << std::endl;
-    if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
-    {
-      std::cout << "failed" << std::endl;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-  }
-}
-
 TEST(test_dawn, test_shmChannel_notify)
 {
   using namespace dawn;
@@ -270,6 +117,26 @@ TEST(test_dawn, test_shmChannel_wait)
   using namespace dawn;
   shmChannel a("dawn_test_channel");
   a.waitNotify();
+}
+
+TEST(test_dawn, test_shmChannel_multiThread)
+{
+  using namespace dawn;
+  shmChannel a("dawn_test_channel");
+  auto func = [&]() {
+    a.waitNotify();
+    std::cout << "recevie notify" << std::endl;
+  };
+
+  std::thread(func).detach();
+  std::thread(func).detach();
+  std::thread(func).detach();
+  std::thread(func).detach();
+  std::thread(func).detach();
+  while (1)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  }
 }
 
 TEST(test_dawn, test_shmChannel_try_wait)
