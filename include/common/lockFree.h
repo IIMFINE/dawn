@@ -82,8 +82,8 @@ namespace dawn
         do
         {
           headNode = oldNode;
-          hazardPointerQueue_.setHazardPointer(headNode);
           oldNode = LF_queueHead_.load(std::memory_order_acquire);
+          hazardPointerQueue_.setHazardPointer(oldNode);
         } while (oldNode != headNode);
         if (oldNode != nullptr && LF_queueHead_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
         {

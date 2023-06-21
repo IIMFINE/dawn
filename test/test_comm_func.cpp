@@ -7,6 +7,7 @@
 #include "common/threadPool.h"
 #include "common/memoryPool.h"
 #include "common/baseOperator.h"
+#include "common/heap.h"
 
 TEST(test_dawn, test_thread_pool)
 {
@@ -170,6 +171,7 @@ TEST(test_dawn, benchmark_GET_MEM_QUEUE_MASK)
     {
       cyclesCounter counter("GET_MEM_QUEUE_MASK");
       int a = GET_MEM_QUEUE_MASK(127);
+      (void)a;
     }
     total_time_span += cyclesCounter::getTimeSpan("GET_MEM_QUEUE_MASK");
   }
@@ -326,4 +328,103 @@ TEST(test_dawn, test_memory_benchmark)
   }
   LOG_INFO("malloc spend average time {} cycles", total_time_span / loop_time);
   std::cout << "malloc spend average time " << total_time_span / loop_time << " cycles" << std::endl;
+}
+
+TEST(test_dawn, test_min_heap)
+{
+  using namespace dawn;
+  minHeap<int, void*> heap;
+  for (int j = 0; j < 3; j++)
+  {
+    heap.push({ 5, nullptr });
+    heap.push({ 2, nullptr });
+    heap.push({ 3, nullptr });
+    heap.push({ 3, nullptr });
+    heap.push({ 5, nullptr });
+    heap.push({ 1, nullptr });
+    heap.push({ 4, nullptr });
+    heap.push({ 6, nullptr });
+    heap.push({ 7, nullptr });
+
+    auto size = heap.size();
+    for (int i = 0; i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << std::endl;
+      heap.pop();
+    }
+
+    std::cout << "-----------------" << std::endl;
+  }
+
+  heap.push({ 5, nullptr });
+  heap.push({ 2, nullptr });
+  heap.push({ 3, nullptr });
+  heap.push({ 3, nullptr });
+  heap.push({ 5, nullptr });
+  heap.push({ 1, nullptr });
+  heap.push({ 4, nullptr });
+  heap.push({ 6, nullptr });
+  heap.push({ 7, nullptr });
+
+  auto heap1 = heap;
+  auto heap2 = std::move(heap1);
+  for (int i = 0; i < 9; i++)
+  {
+    auto top = heap2.top();
+    auto [key, value] = top.value();
+    std::cout << key << std::endl;
+    heap2.pop();
+  }
+
+}
+
+TEST(test_dawn, test_max_heap)
+{
+  using namespace dawn;
+  maxHeap<int, void*> heap;
+  for (int j = 0; j < 3; j++)
+  {
+    heap.push({ 5, nullptr });
+    heap.push({ 2, nullptr });
+    heap.push({ 3, nullptr });
+    heap.push({ 3, nullptr });
+    heap.push({ 5, nullptr });
+    heap.push({ 1, nullptr });
+    heap.push({ 4, nullptr });
+    heap.push({ 6, nullptr });
+    heap.push({ 7, nullptr });
+
+    auto size = heap.size();
+    for (int i = 0; i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << std::endl;
+      heap.pop();
+    }
+
+    std::cout << "-----------------" << std::endl;
+  }
+
+  heap.push({ 5, nullptr });
+  heap.push({ 2, nullptr });
+  heap.push({ 3, nullptr });
+  heap.push({ 3, nullptr });
+  heap.push({ 5, nullptr });
+  heap.push({ 1, nullptr });
+  heap.push({ 4, nullptr });
+  heap.push({ 6, nullptr });
+  heap.push({ 7, nullptr });
+
+  auto heap1 = heap;
+  auto heap2 = std::move(heap1);
+  for (int i = 0; i < 9; i++)
+  {
+    auto top = heap2.top();
+    auto [key, value] = top.value();
+    std::cout << key << std::endl;
+    heap2.pop();
+  }
 }
