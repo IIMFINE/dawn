@@ -30,7 +30,7 @@ namespace dawn
   class lockFreeStack
   {
     std::atomic<LF_node_t<T> *> LF_queueHead_;
-    hazardPointerQueue<LF_node_t<T> *> hazardPointerQueue_;
+    threadLocalHazardPointerQueue<LF_node_t<T> *> hazardPointerQueue_;
 
   public:
     lockFreeStack();
