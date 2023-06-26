@@ -351,10 +351,10 @@ TEST(test_dawn, test_min_heap)
     {
       auto top = heap.top();
       auto [key, value] = top.value();
-      std::cout << key << std::endl;
+      std::cout << key << " ";
       heap.pop();
     }
-
+    std::cout << std::endl;
     std::cout << "-----------------" << std::endl;
   }
 
@@ -370,14 +370,18 @@ TEST(test_dawn, test_min_heap)
 
   auto heap1 = heap;
   auto heap2 = std::move(heap1);
+  std::vector<int> output;
+  std::vector<int> baseline = { 1, 2, 3, 3, 4, 5, 5, 6, 7 };
   for (int i = 0; i < 9; i++)
   {
     auto top = heap2.top();
     auto [key, value] = top.value();
-    std::cout << key << std::endl;
+    std::cout << key << " ";
+    output.push_back(key);
     heap2.pop();
   }
-
+  std::cout << std::endl;
+  EXPECT_EQ(output, baseline);
 }
 
 TEST(test_dawn, test_max_heap)
@@ -401,10 +405,10 @@ TEST(test_dawn, test_max_heap)
     {
       auto top = heap.top();
       auto [key, value] = top.value();
-      std::cout << key << std::endl;
+      std::cout << key << " ";
       heap.pop();
     }
-
+    std::cout << std::endl;
     std::cout << "-----------------" << std::endl;
   }
 
@@ -420,11 +424,60 @@ TEST(test_dawn, test_max_heap)
 
   auto heap1 = heap;
   auto heap2 = std::move(heap1);
+  std::vector<int>  output;
+  std::vector<int>  baseline{ 7, 6, 5, 5, 4, 3, 3, 2, 1 };
   for (int i = 0; i < 9; i++)
   {
     auto top = heap2.top();
     auto [key, value] = top.value();
-    std::cout << key << std::endl;
+    std::cout << key << " ";
+    output.push_back(key);
     heap2.pop();
+  }
+  std::cout << std::endl;
+  EXPECT_EQ(output, baseline);
+}
+
+
+TEST(test_dawn, test_max_heap_node)
+{
+  using namespace dawn;
+  maxHeap<int, void*> heap;
+  for (int j = 0; j < 1; j++)
+  {
+    auto it = heap.pushAndGetNode({ 5, nullptr });
+    heap.push({ 2, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    heap.push({ 3, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 3, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 5, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 1, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 4, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 6, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    heap.push({ 7, nullptr });
+    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    auto size = heap.size();
+    for (int i = 0; i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << " ";
+      heap.pop();
+    }
+    std::cout << std::endl;
+    std::cout << "-----------------" << std::endl;
   }
 }

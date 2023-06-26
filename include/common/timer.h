@@ -4,6 +4,7 @@
 #include "heap.h"
 #include "threadPool.h"
 #include "funcWrapper.h"
+#include "hazardPointer.h"
 
 namespace dawn
 {
@@ -14,11 +15,11 @@ namespace dawn
     SECOND
   };
 
-  struct eventTimerCompanion
+  struct eventTimerCompanion : public enable_shared_from_this<eventTimerCompanion>
   {
     eventTimerCompanion() = default;
     ~eventTimerCompanion();
-    bool registerEvent(funcWrapper callback, uint32_t interval, intervalUnit unit);
+    bool addEvent(funcWrapper callback, uint32_t interval, intervalUnit unit);
     bool unregisterEvent();
   };
 
@@ -29,9 +30,8 @@ namespace dawn
     ~eventTimer() = default;
     eventTimer(const eventTimer &timer) = delete;
     eventTimer& operator=(const eventTimer &timer) = delete;
-
     registerInstance();
-    bool registerEvent();
+    bool addEvent();
   };
 
 } //namespace dawn

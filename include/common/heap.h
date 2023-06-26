@@ -2,16 +2,35 @@
 #define _HEAP_H_
 #include <vector>
 #include <optional>
+#include <memory>
+#include <algorithm>
 #include "type.h"
 
 namespace dawn
 {
 #define _GET_PARENT_INDEX(index) ((index - 1) / 2)
 
+  constexpr uint32_t INVALID_HEAP_POSITION = 0xFFFFFFFF;
   struct minixHeap
   {
+    template<typename KEY_T, typename CONTENT_T>
+    struct heapNode : public std::enable_shared_from_this<heapNode<KEY_T, CONTENT_T>>
+    {
+      heapNode();
+      ~heapNode() = default;
+      heapNode(uint32_t heapIndex, std::pair<KEY_T, CONTENT_T>&& data_pair);
+      heapNode(const heapNode &node);
+      heapNode(heapNode &&node);
+      heapNode &operator=(const heapNode &node);
+      heapNode &operator=(heapNode &&node);
+      void swap(heapNode<KEY_T, CONTENT_T> &node);
+      /// @brief Use smart pointer to keep update of heap position of node
+      std::shared_ptr<uint32_t>                       heapPosition_;
+      std::shared_ptr<std::pair<KEY_T, CONTENT_T>>    dataPair_;
+    };
+
     minixHeap() = default;
-    virtual ~minixHeap() = default;
+    ~minixHeap() = default;
     bool empty();
     int size();
     protected:
@@ -27,12 +46,13 @@ namespace dawn
     maxHeap(maxHeap &&heap);
     maxHeap &operator=(const maxHeap &heap);
     maxHeap &operator=(maxHeap &&heap);
-    bool push(std::pair<KEY_T, CONTENT_T> node);
+    bool push(std::pair<KEY_T, CONTENT_T> &&dataPair);
+    minixHeap::heapNode<KEY_T, CONTENT_T> pushAndGetNode(std::pair<KEY_T, CONTENT_T> &&dataPair);
     std::optional<std::pair<KEY_T, CONTENT_T>> pop();
     std::optional<std::pair<KEY_T, CONTENT_T>> top();
-
+    bool heapify(int parentIndex);
     private:
-    std::vector<std::pair<KEY_T, CONTENT_T>> heap_;
+    std::vector<minixHeap::heapNode<key_t, CONTENT_T>> heap_;
   };
 
   template<typename KEY_T, typename CONTENT_T>
@@ -44,13 +64,67 @@ namespace dawn
     minHeap(minHeap &&heap);
     minHeap &operator=(const minHeap &heap);
     minHeap &operator=(minHeap &&heap);
-    bool push(std::pair<KEY_T, CONTENT_T> node);
+    bool push(std::pair<KEY_T, CONTENT_T> &&node);
     std::optional<std::pair<KEY_T, CONTENT_T>> pop();
     std::optional<std::pair<KEY_T, CONTENT_T>> top();
-
+    bool heapify(int parentIndex);
     private:
     std::vector<std::pair<KEY_T, CONTENT_T>> heap_;
   };
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode() :
+    heapPosition_(std::make_shared<uint32_t>(INVALID_HEAP_POSITION)),
+    dataPair_(std::make_shared<std::pair<KEY_T, CONTENT_T>>())
+  {
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode(uint32_t heapIndex, std::pair<KEY_T, CONTENT_T>&& data_pair) :
+    heapPosition_(std::make_shared<uint32_t>(heapIndex)),
+    dataPair_(std::make_shared<std::pair<KEY_T, CONTENT_T>>(std::forward<std::pair<KEY_T, CONTENT_T>>(data_pair)))
+  {
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode(const heapNode &node)
+  {
+    heapPosition_ = node.heapPosition_;
+    dataPair_ = node.dataPair_;
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode(heapNode &&node)
+  {
+    heapPosition_ = std::move(node.heapPosition_);
+    dataPair_ = std::move(node.dataPair_);
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>& minixHeap::heapNode<KEY_T, CONTENT_T>::operator=(const heapNode &node)
+  {
+    heapPosition_ = node.heapPosition_;
+    dataPair_ = node.dataPair_;
+    return *this;
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T>& minixHeap::heapNode<KEY_T, CONTENT_T>::operator=(heapNode &&node)
+  {
+    // heapPosition_ = std::move(node.heapPosition_);
+    dataPair_ = std::move(node.dataPair_);
+
+    return *this;
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  void minixHeap::heapNode<KEY_T, CONTENT_T>::swap(heapNode<KEY_T, CONTENT_T> &node)
+  {
+    std::swap(node.dataPair_, dataPair_);
+    auto tempPosition = *(node.heapPosition_);
+    *(node.heapPosition_) = *(heapPosition_);
+    *(heapPosition_) = tempPosition;
+  }
 
   template<typename KEY_T, typename CONTENT_T>
   maxHeap<KEY_T, CONTENT_T > ::maxHeap() :
@@ -93,11 +167,11 @@ namespace dawn
   }
 
   template<typename KEY_T, typename CONTENT_T>
-  bool maxHeap<KEY_T, CONTENT_T >::push(std::pair<KEY_T, CONTENT_T> node)
+  bool maxHeap<KEY_T, CONTENT_T >::push(std::pair<KEY_T, CONTENT_T> &&dataPair)
   {
-    heap_.emplace_back(node);
     heapSize_++;
     auto childIndex = heapSize_ - 1;
+    heap_.emplace_back(minixHeap::heapNode(childIndex, std::forward<std::pair<KEY_T, CONTENT_T>>(dataPair)));
     while (1)
     {
       if (childIndex == 0)
@@ -105,7 +179,7 @@ namespace dawn
         break;
       }
       auto parentIndex = _GET_PARENT_INDEX(childIndex);
-      if (heap_[parentIndex].first < heap_[childIndex].first)
+      if (heap_[parentIndex].dataPair_->first < heap_[childIndex].dataPair_->first)
       {
         std::swap(heap_[parentIndex], heap_[childIndex]);
         childIndex = parentIndex;
@@ -119,42 +193,82 @@ namespace dawn
   }
 
   template<typename KEY_T, typename CONTENT_T>
+  minixHeap::heapNode<KEY_T, CONTENT_T> maxHeap<KEY_T, CONTENT_T>::pushAndGetNode(std::pair<KEY_T, CONTENT_T> &&dataPair)
+  {
+    heapSize_++;
+    auto childIndex = heapSize_ - 1;
+    heap_.emplace_back(minixHeap::heapNode(childIndex, std::forward<std::pair<KEY_T, CONTENT_T>>(dataPair)));
+    while (1)
+    {
+      if (childIndex == 0)
+      {
+        break;
+      }
+      auto parentIndex = _GET_PARENT_INDEX(childIndex);
+      if (heap_[parentIndex].dataPair_->first < heap_[childIndex].dataPair_->first)
+      {
+        std::swap(heap_[parentIndex], heap_[childIndex]);
+        childIndex = parentIndex;
+      }
+      else
+      {
+        break;
+      }
+    }
+    return heap_[childIndex];
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
   std::optional<std::pair<KEY_T, CONTENT_T>> maxHeap<KEY_T, CONTENT_T>::pop()
   {
     if (heapSize_ == 0)
     {
       return std::nullopt;
     }
-    auto ret = std::move(heap_[0]);
-    heap_[0] = std::move(heap_.back());
+    std::swap(heap_[0], heap_.back());
+    auto ret = std::move(heap_.back());
     heap_.pop_back();
     heapSize_--;
-    int parentIndex = 0;
-    auto endIndex = heapSize_ - 1;
 
     if (heapSize_ <= 1)
     {
-      return std::make_optional(ret);
+      return std::make_optional(*(ret.dataPair_));
     }
+    heapify(0);
+    return std::make_optional(*(ret.dataPair_));
+  }
 
+  template<typename KEY_T, typename CONTENT_T>
+  std::optional<std::pair<KEY_T, CONTENT_T>> maxHeap<KEY_T, CONTENT_T>::top()
+  {
+    if (heapSize_ == 0)
+    {
+      return std::nullopt;
+    }
+    return std::make_optional(*(heap_[0].dataPair_));
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  bool maxHeap<KEY_T, CONTENT_T>::heapify(int parentIndex)
+  {
+    auto endIndex = heapSize_ - 1;
     while (1)
     {
       int leftChildIndex = 2 * parentIndex + 1;
       int rightChildIndex = 2 * parentIndex + 2;
 
-      if (leftChildIndex > endIndex)
-      {
-        leftChildIndex = endIndex;
-      }
-
       if (rightChildIndex > endIndex)
       {
         rightChildIndex = endIndex;
+        if (leftChildIndex > endIndex)
+        {
+          break;
+        }
       }
 
-      if (heap_[rightChildIndex].first > heap_[leftChildIndex].first)
+      if (heap_[rightChildIndex].dataPair_->first > heap_[leftChildIndex].dataPair_->first)
       {
-        if (heap_[rightChildIndex].first > heap_[parentIndex].first)
+        if (heap_[rightChildIndex].dataPair_->first > heap_[parentIndex].dataPair_->first)
         {
           std::swap(heap_[rightChildIndex], heap_[parentIndex]);
           parentIndex = rightChildIndex;
@@ -166,7 +280,7 @@ namespace dawn
       }
       else
       {
-        if (heap_[leftChildIndex].first > heap_[parentIndex].first)
+        if (heap_[leftChildIndex].dataPair_->first > heap_[parentIndex].dataPair_->first)
         {
           std::swap(heap_[leftChildIndex], heap_[parentIndex]);
           parentIndex = leftChildIndex;
@@ -182,17 +296,7 @@ namespace dawn
         break;
       }
     }
-    return std::make_optional(ret);
-  }
-
-  template<typename KEY_T, typename CONTENT_T>
-  std::optional<std::pair<KEY_T, CONTENT_T>> maxHeap<KEY_T, CONTENT_T>::top()
-  {
-    if (heapSize_ == 0)
-    {
-      return std::nullopt;
-    }
-    return std::make_optional(heap_[0]);
+    return PROCESS_SUCCESS;
   }
 
   template<typename KEY_T, typename CONTENT_T>
@@ -236,11 +340,12 @@ namespace dawn
   }
 
   template<typename KEY_T, typename CONTENT_T>
-  bool minHeap<KEY_T, CONTENT_T>::push(std::pair<KEY_T, CONTENT_T> node)
+  bool minHeap<KEY_T, CONTENT_T>::push(std::pair<KEY_T, CONTENT_T> &&node)
   {
-    heap_.emplace_back(node);
+    heap_.emplace_back(std::forward<std::pair<KEY_T, CONTENT_T>>(node));
     heapSize_++;
     auto childIndex = heapSize_ - 1;
+
     while (1)
     {
       if (childIndex == 0)
@@ -272,14 +377,29 @@ namespace dawn
     heap_[0] = std::move(heap_.back());
     heap_.pop_back();
     heapSize_--;
-    int parentIndex = 0;
-    auto endIndex = heapSize_ - 1;
 
     if (heapSize_ <= 1)
     {
       return std::make_optional(ret);
     }
+    heapify(0);
+    return std::make_optional(ret);
+  }
 
+  template<typename KEY_T, typename CONTENT_T>
+  std::optional<std::pair<KEY_T, CONTENT_T>> minHeap<KEY_T, CONTENT_T>::top()
+  {
+    if (heapSize_ == 0)
+    {
+      return std::nullopt;
+    }
+    return std::make_optional(heap_[0]);
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  bool minHeap<KEY_T, CONTENT_T>::heapify(int parentIndex)
+  {
+    auto endIndex = heapSize_ - 1;
     while (1)
     {
       int leftChildIndex = 2 * parentIndex + 1;
@@ -290,7 +410,7 @@ namespace dawn
         rightChildIndex = endIndex;
         if (leftChildIndex > endIndex)
         {
-          leftChildIndex = endIndex;
+          break;
         }
       }
 
@@ -323,17 +443,8 @@ namespace dawn
         break;
       }
     }
-    return std::make_optional(ret);
-  }
 
-  template<typename KEY_T, typename CONTENT_T>
-  std::optional<std::pair<KEY_T, CONTENT_T>> minHeap<KEY_T, CONTENT_T>::top()
-  {
-    if (heapSize_ == 0)
-    {
-      return std::nullopt;
-    }
-    return std::make_optional(heap_[0]);
+    return PROCESS_SUCCESS;
   }
 
 } // namespace dawn
