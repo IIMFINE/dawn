@@ -5,6 +5,7 @@
 #include <memory>
 #include <algorithm>
 #include "type.h"
+#include <iostream>
 
 namespace dawn
 {
@@ -94,10 +95,12 @@ namespace dawn
   }
 
   template<typename KEY_T, typename CONTENT_T>
-  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode(heapNode &&node)
+  minixHeap::heapNode<KEY_T, CONTENT_T>::heapNode(heapNode &&node) :
+    heapPosition_(std::make_shared<uint32_t>(INVALID_HEAP_POSITION)),
+    dataPair_(std::make_shared<std::pair<KEY_T, CONTENT_T>>())
   {
-    heapPosition_ = std::move(node.heapPosition_);
-    dataPair_ = std::move(node.dataPair_);
+    std::swap(*(heapPosition_), *(node.heapPosition_));
+    std::swap(*(dataPair_), *(node.dataPair_));
   }
 
   template<typename KEY_T, typename CONTENT_T>
@@ -111,9 +114,10 @@ namespace dawn
   template<typename KEY_T, typename CONTENT_T>
   minixHeap::heapNode<KEY_T, CONTENT_T>& minixHeap::heapNode<KEY_T, CONTENT_T>::operator=(heapNode &&node)
   {
-    // heapPosition_ = std::move(node.heapPosition_);
-    dataPair_ = std::move(node.dataPair_);
+    // std::swap(heapPosition_, node.heapPosition_);
+    std::swap(*(heapPosition_), *(node.heapPosition_));
 
+    dataPair_ = std::move(node.dataPair_);
     return *this;
   }
 
@@ -179,6 +183,7 @@ namespace dawn
         break;
       }
       auto parentIndex = _GET_PARENT_INDEX(childIndex);
+      std::cout << "pan parentIndex " << parentIndex << std::endl;
       if (heap_[parentIndex].dataPair_->first < heap_[childIndex].dataPair_->first)
       {
         std::swap(heap_[parentIndex], heap_[childIndex]);

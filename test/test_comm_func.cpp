@@ -442,42 +442,58 @@ TEST(test_dawn, test_max_heap)
 TEST(test_dawn, test_max_heap_node)
 {
   using namespace dawn;
-  maxHeap<int, void*> heap;
-  for (int j = 0; j < 1; j++)
-  {
-    auto it = heap.pushAndGetNode({ 5, nullptr });
-    heap.push({ 2, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
-    heap.push({ 3, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+  minixHeap::heapNode<int, void*> node1{ 0,std::pair<int, void*>{1, nullptr} };
+  minixHeap::heapNode<int, void*> node2{ 1,std::pair<int, void*>{1, nullptr} };
+  minixHeap::heapNode<int, void*> node3{ 2,std::pair<int, void*>{1, nullptr} };
+  auto node_tmp = node1;
+  std::swap(node1, node2);
+  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
+  std::swap(node2, node3);
+  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
+  std::swap(node1, node3);
+  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
 
-    heap.push({ 3, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // maxHeap<int, void*> heap;
+    // for (int j = 0; j < 1; j++)
+    // {
+    //   auto it = heap.pushAndGetNode({ 1, nullptr });
+    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
+    //   heap.push({ 0, nullptr });
+    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
+    //   heap.push({ 3, nullptr });
+    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
+      // heap.push({ 3, nullptr });
+      // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    heap.push({ 5, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // heap.push({ 6, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    heap.push({ 1, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // heap.push({ 5, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    heap.push({ 4, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // heap.push({ 1, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    heap.push({ 6, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // heap.push({ 4, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    heap.push({ 7, nullptr });
-    std::cout << "5 position " << *it.heapPosition_ << std::endl;
+    // heap.push({ 6, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
 
-    auto size = heap.size();
-    for (int i = 0; i < size; i++)
-    {
-      auto top = heap.top();
-      auto [key, value] = top.value();
-      std::cout << key << " ";
-      heap.pop();
-    }
-    std::cout << std::endl;
+    // heap.push({ 7, nullptr });
+    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
+
+    // auto size = heap.size();
+    // for (int i = 0; i < size; i++)
+    // {
+    //   auto top = heap.top();
+    //   auto [key, value] = top.value();
+    //   std::cout << key << " ";
+    //   heap.pop();
+    // }
+    // std::cout << std::endl;
     std::cout << "-----------------" << std::endl;
-  }
+
 }
+
+
