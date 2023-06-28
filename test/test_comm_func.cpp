@@ -438,79 +438,119 @@ TEST(test_dawn, test_max_heap)
   EXPECT_EQ(output, baseline);
 }
 
+
+TEST(test_dawn, test_min_heap_node)
+{
+  using namespace dawn;
+
+  minHeap<int, void*> heap;
+  for (int j = 0; j < 1; j++)
+  {
+    auto it = heap.pushAndGetNode({ 1, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    heap.push({ 0, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    heap.push({ 3, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    heap.push({ 3, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    heap.push({ 6, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+
+    heap.push({ 5, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    heap.push({ 1, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+
+    heap.push({ 0, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+
+    heap.push({ 6, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+
+    heap.push({ 7, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+
+    auto size = heap.size();
+    for (int i = 0; i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << " ";
+      heap.pop();
+    }
+    std::cout << std::endl;
+    std::cout << "-----------------" << std::endl;
+
+  }
+}
+
 TEST(test_dawn, test_max_heap_node)
+{
+  using namespace dawn;
+
+  maxHeap<int, void*> heap;
+  for (int j = 0; j < 1; j++)
+  {
+    auto it = heap.pushAndGetNode({ 1, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    heap.push({ 0, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    heap.push({ 3, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+    heap.push({ 3, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+    heap.push({ 6, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+
+    heap.push({ 5, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    heap.push({ 1, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+
+    heap.push({ 4, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+
+    heap.push({ 6, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+
+    heap.push({ 7, nullptr });
+    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+
+    auto size = heap.size();
+    for (int i = 0; i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << " ";
+      heap.pop();
+    }
+    std::cout << std::endl;
+    std::cout << "-----------------" << std::endl;
+  }
+}
+
+TEST(test_dawn, test_heap_node)
 {
   using namespace dawn;
   minixHeap::heapNode<int, void*> node1{ 0,std::pair<int, void*>{1, nullptr} };
   minixHeap::heapNode<int, void*> node2{ 1,std::pair<int, void*>{1, nullptr} };
   minixHeap::heapNode<int, void*> node3{ 2,std::pair<int, void*>{1, nullptr} };
   auto node_tmp = node1;
-  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
-  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
-  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
-  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
+  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, node1.nodeInfo_->heapPosition_);
+  EXPECT_EQ(node_tmp.nodeInfo_, node1.nodeInfo_);
+
   std::swap(node1, node2);
-  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
-  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
-  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
-  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
-  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
+  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 1);
+  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 1);
+  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
+
   std::swap(node2, node3);
-  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
-  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
-  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
-  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
-  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
-
+  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 2);
+  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 2);
+  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 1);
   std::swap(node1, node3);
-  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
-  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
-  std::cout << "node3 address " << node3.heapPosition_ << std::endl; 
-  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
-
-  std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
-
-    // maxHeap<int, void*> heap;
-    // for (int j = 0; j < 1; j++)
-    // {
-    //   auto it = heap.pushAndGetNode({ 1, nullptr });
-    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
-    //   heap.push({ 0, nullptr });
-    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
-    //   heap.push({ 3, nullptr });
-    //   std::cout << "1 position " << *it.heapPosition_ << std::endl;
-      // heap.push({ 3, nullptr });
-      // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 6, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 5, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 1, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 4, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 6, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // heap.push({ 7, nullptr });
-    // std::cout << "5 position " << *it.heapPosition_ << std::endl;
-
-    // auto size = heap.size();
-    // for (int i = 0; i < size; i++)
-    // {
-    //   auto top = heap.top();
-    //   auto [key, value] = top.value();
-    //   std::cout << key << " ";
-    //   heap.pop();
-    // }
-    // std::cout << std::endl;
-    std::cout << "-----------------" << std::endl;
-
+  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 0);
+  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
+  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 2);
 }
-
-
