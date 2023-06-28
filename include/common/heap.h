@@ -100,6 +100,7 @@ namespace dawn
     dataPair_(std::make_shared<std::pair<KEY_T, CONTENT_T>>())
   {
     std::swap(*(heapPosition_), *(node.heapPosition_));
+    std::swap(heapPosition_, node.heapPosition_);
     std::swap(*(dataPair_), *(node.dataPair_));
   }
 
@@ -114,7 +115,7 @@ namespace dawn
   template<typename KEY_T, typename CONTENT_T>
   minixHeap::heapNode<KEY_T, CONTENT_T>& minixHeap::heapNode<KEY_T, CONTENT_T>::operator=(heapNode &&node)
   {
-    // std::swap(heapPosition_, node.heapPosition_);
+    std::swap(heapPosition_, node.heapPosition_);
     std::swap(*(heapPosition_), *(node.heapPosition_));
 
     dataPair_ = std::move(node.dataPair_);

@@ -438,7 +438,6 @@ TEST(test_dawn, test_max_heap)
   EXPECT_EQ(output, baseline);
 }
 
-
 TEST(test_dawn, test_max_heap_node)
 {
   using namespace dawn;
@@ -446,11 +445,29 @@ TEST(test_dawn, test_max_heap_node)
   minixHeap::heapNode<int, void*> node2{ 1,std::pair<int, void*>{1, nullptr} };
   minixHeap::heapNode<int, void*> node3{ 2,std::pair<int, void*>{1, nullptr} };
   auto node_tmp = node1;
+  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
+  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
+  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
+  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
   std::swap(node1, node2);
+  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
+  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
+  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
+  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
   std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
   std::swap(node2, node3);
+  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
+  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
+  std::cout << "node3 address " << node3.heapPosition_ << std::endl;
+  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
   std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
+
   std::swap(node1, node3);
+  std::cout << "node1 address " << node1.heapPosition_ << std::endl;
+  std::cout << "node2 address " << node2.heapPosition_ << std::endl;
+  std::cout << "node3 address " << node3.heapPosition_ << std::endl; 
+  std::cout << "node_tmp address " << node_tmp.heapPosition_ << std::endl;
+
   std::cout << "node_tmp " << *node_tmp.heapPosition_ << std::endl;
 
     // maxHeap<int, void*> heap;
