@@ -533,9 +533,9 @@ TEST(test_dawn, test_max_heap_node)
 TEST(test_dawn, test_heap_node)
 {
   using namespace dawn;
-  minixHeap::heapNode<int, void*> node1{ 0,std::pair<int, void*>{1, nullptr} };
-  minixHeap::heapNode<int, void*> node2{ 1,std::pair<int, void*>{1, nullptr} };
-  minixHeap::heapNode<int, void*> node3{ 2,std::pair<int, void*>{1, nullptr} };
+  minixHeap<int, void*>::heapNode node1{ 0,std::pair<int, void*>{1, nullptr} };
+  minixHeap<int, void*>::heapNode node2{ 1,std::pair<int, void*>{1, nullptr} };
+  minixHeap<int, void*>::heapNode node3{ 2,std::pair<int, void*>{1, nullptr} };
   auto node_tmp = node1;
   EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, node1.nodeInfo_->heapPosition_);
   EXPECT_EQ(node_tmp.nodeInfo_, node1.nodeInfo_);
