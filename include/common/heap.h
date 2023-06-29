@@ -25,6 +25,7 @@ namespace dawn
         {
         }
         nodeInfo(const nodeInfo&) = default;
+
         /// @brief This destruct function will be called once only when its last shared pointer expire.
         ///        So it need to set validInHeap_ to false manually.
         ~nodeInfo() = default;
@@ -51,7 +52,7 @@ namespace dawn
       void swap(heapNode &node);
       bool validInHeap();
 
-      /// @brief Use smart pointer to keep update of heap position of node
+      /// @brief Use smart pointer to keep latest heap position of node.
       std::shared_ptr<nodeInfo>                       nodeInfo_;
       std::shared_ptr<std::pair<KEY_T, CONTENT_T>>    dataPair_;
     };
@@ -66,7 +67,15 @@ namespace dawn
     int  size();
     bool erase(uint32_t heapIndex);
     bool erase(minixHeap::heapNode &node);
+
+    /// @brief Heapify from parent index.
+    /// @param parentIndex Given parent index.
+    /// @return Return final position changed from parent index after heapify.
     virtual uint32_t heapify(uint32_t parentIndex) = 0;
+
+    /// @brief Heapify from child index to its parent index.
+    /// @param childIndex Given child index.
+    /// @return Return final position changed from child index after heapify.
     virtual uint32_t heapifyFromChild(uint32_t childIndex) = 0;
 
     protected:
@@ -127,6 +136,7 @@ namespace dawn
       return std::nullopt;
     }
 
+    heap_[0].nodeInfo_->validInHeap_ = false;
     std::swap(heap_[0], heap_.back());
     auto ret = std::move(heap_.back());
     heap_.pop_back();
@@ -165,10 +175,15 @@ namespace dawn
   template<typename KEY_T, typename CONTENT_T>
   bool minixHeap<KEY_T, CONTENT_T>::erase(uint32_t heapIndex)
   {
+    if (heapSize_ == 0 || heap_[heapIndex].validInHeap() == false)
+    {
+      return PROCESS_FAIL;
+    }
+
     auto endIndex = this->heapSize_ - 1;
     if (heapIndex > endIndex)
     {
-      return false;
+      return PROCESS_FAIL;
     }
     else if (heapIndex == endIndex)
     {
@@ -186,9 +201,13 @@ namespace dawn
   }
 
   template<typename KEY_T, typename CONTENT_T>
-  bool minixHeap<KEY_T, CONTENT_T>::erase(typename minixHeap::heapNode &node)
+  bool minixHeap<KEY_T, CONTENT_T>::erase(typename minixHeap<KEY_T, CONTENT_T>::heapNode &node)
   {
-    return erase(node.nodeInfo_->heapIndex_);
+    if (node.validInHeap() == false)
+    {
+      return PROCESS_FAIL;
+    }
+    return erase(node.nodeInfo_->heapPosition_);
   }
 
   template<typename KEY_T, typename CONTENT_T>

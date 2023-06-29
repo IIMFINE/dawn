@@ -554,3 +554,39 @@ TEST(test_dawn, test_heap_node)
   EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
   EXPECT_EQ(node3.nodeInfo_->heapPosition_, 2);
 }
+
+TEST(test_dawn, test_erase_heap_node)
+{
+  using namespace dawn;
+
+  maxHeap<int, void*> heap;
+  std::vector<int>  result;
+  for (int j = 0; j < 1; j++)
+  {
+    auto it1 = heap.pushAndGetNode({ 10, nullptr });
+    auto it2 = heap.pushAndGetNode({ 3, nullptr });
+    heap.push({ 3, nullptr });
+    heap.push({ 6, nullptr });
+    heap.push({ 5, nullptr });
+    heap.push({ 1, nullptr });
+    heap.push({ 4, nullptr });
+    heap.push({ 6, nullptr });
+    heap.push({ 7, nullptr });
+
+    heap.erase(it1);
+    heap.erase(it2);
+    for (int i = 0, size = heap.size(); i < size; i++)
+    {
+      auto top = heap.top();
+      auto [key, value] = top.value();
+      std::cout << key << " ";
+      result.push_back(key);
+      heap.pop();
+    }
+
+    std::vector<int> baseline{ 7, 6, 6, 5, 4, 3, 1 };
+    EXPECT_EQ(result, baseline);
+    std::cout << std::endl;
+    std::cout << "-----------------" << std::endl;
+  }
+}
