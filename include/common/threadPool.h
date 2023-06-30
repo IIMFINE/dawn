@@ -121,22 +121,23 @@ namespace dawn
     threadPoolManager() = default;
     ~threadPoolManager() = default;
     template <typename... executeTask_t>
-    void createThreadPool(int workThreadNum = 1, executeTask_t &&...executeTasks)
+    std::shared_ptr<threadPool> createThreadPool(int workThreadNum = 1, executeTask_t &&...executeTasks)
     {
-      auto spyThreadPool_ptr = std::make_unique<threadPool>();
-      spyThreadPool_ptr->init(workThreadNum);
+      auto spyThreadPool = std::make_shared<threadPool>();
+      spyThreadPool->init(workThreadNum);
       if (sizeof...(executeTasks) != 0)
       {
-        std::initializer_list<int>{(spyThreadPool_ptr->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
+        std::initializer_list<int>{(spyThreadPool->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
       }
-      spyThreadPoolGroup_.push_back(std::move(spyThreadPool_ptr));
+      spyThreadPoolGroup_.push_back(spyThreadPool);
+      return spyThreadPool;
     }
     void threadPoolExecute();
     void threadPoolHalt();
     void threadPoolDestroy();
 
     private:
-    std::vector<std::unique_ptr<threadPool>> spyThreadPoolGroup_;
+    std::vector<std::shared_ptr<threadPool>> spyThreadPoolGroup_;
   };
 
 };

@@ -26,13 +26,43 @@ namespace dawn
   template<typename INTERVAL_UNIT>
   struct eventTimer
   {
-    eventTimer() = default;
-    ~eventTimer() = default;
+    eventTimer() :
+      isRunning_(true)
+    {
+      threadPool_ = threadPoolManager_.createThreadPool(2);
+      timerCallbackMinHeap_ = std::make_unique<minHeap<uint32_t, funcWrapper>>();
+    }
+    ~eventTimer()
+    {
+      threadPoolManager_.threadPoolDestroy();
+    }
     eventTimer(const eventTimer &timer) = delete;
     eventTimer& operator=(const eventTimer &timer) = delete;
-    registerInstance();
-    bool addEvent();
+    void activateTimerEventLoop()
+    {
+      auto func = [&]() {
+        while (isRunning_.load(std::memory_order_acquire) == true)
+        {
+          {
+            std::shared_lock<std::shared_mutex>   lock(timerCallbackMinHeap_->mutex_);
+            auto heapNode = timerCallbackMinHeap_->top();
+            if (heapNode.has_value())
+            {
+              auto now = std::chrono::steady_clock::now();
+              auto interval = std::chrono::duration_cast<INTERVAL_UNIT>(now - heapNode.value().first);
+              if (interval.count() >= heapNode.value().second)
+              {
+              }
+            }
+          }
+        }
+        };
+    }
+    private:
+    std::atomic<bool>                                   isRunning_;
+    threadPoolManager                                   threadPoolManager_;
+    std::shared_ptr<threadPool>                         threadPool_;
+    std::unique_ptr<minHeap<uint32_t, funcWrapper>>     timerCallbackMinHeap_;
   };
-
 } //namespace dawn
 #endif

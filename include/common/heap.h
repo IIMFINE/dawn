@@ -7,6 +7,8 @@
 #include "type.h"
 #include <iostream>
 
+///@todo Improve heap synchronization performance.
+
 namespace dawn
 {
 #define _GET_PARENT_INDEX(index) ((index - 1) / 2)
@@ -80,7 +82,9 @@ namespace dawn
 
     protected:
     uint32_t heapSize_ = 0;
-    std::vector<typename minixHeap<KEY_T, CONTENT_T>::heapNode> heap_;
+    std::vector<typename minixHeap<KEY_T, CONTENT_T>::heapNode>   heap_;
+    public:
+    std::shared_mutex                                             heapMutex_;
   };
 
   template<typename KEY_T, typename CONTENT_T>
