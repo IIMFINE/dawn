@@ -1,12 +1,13 @@
 #ifndef _THREAD_FUNC_H_
 #define _THREAD_FUNC_H_
 
-#include "type.h"
 #include <mutex>
 #include <thread>
 #include <vector>
 #include <condition_variable>
 #include <list>
+
+#include "type.h"
 #include "setLogger.h"
 #include "funcWrapper.h"
 #include "lockFree.h"

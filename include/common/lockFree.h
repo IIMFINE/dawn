@@ -2,6 +2,7 @@
 #define _LOCK_FREE_H_
 #include <atomic>
 #include <thread>
+
 #include "type.h"
 #include "hazardPointer.h"
 #include "setLogger.h"
