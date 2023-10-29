@@ -536,23 +536,18 @@ TEST(test_dawn, test_heap_node)
   minixHeap<int, void*>::heapNode node1{ 0,std::pair<int, void*>{1, nullptr} };
   minixHeap<int, void*>::heapNode node2{ 1,std::pair<int, void*>{1, nullptr} };
   minixHeap<int, void*>::heapNode node3{ 2,std::pair<int, void*>{1, nullptr} };
-  auto node_tmp = node1;
-  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, node1.nodeInfo_->heapPosition_);
-  EXPECT_EQ(node_tmp.nodeInfo_, node1.nodeInfo_);
 
-  std::swap(node1, node2);
-  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 1);
-  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 1);
-  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
+  minixHeap<int, void*>::swap(node1, node2);
+  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 0);
+  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 1);
 
-  std::swap(node2, node3);
-  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 2);
-  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 2);
-  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 1);
-  std::swap(node1, node3);
-  EXPECT_EQ(node_tmp.nodeInfo_->heapPosition_, 0);
+  minixHeap<int, void*>::swap(node2, node3);
+  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 0);
+  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 2);
+
+  minixHeap<int, void*>::swap(node1, node3);
   EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
-  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 2);
+  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 1);
 }
 
 TEST(test_dawn, test_erase_heap_node)

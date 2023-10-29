@@ -53,8 +53,16 @@ namespace dawn
       /// @param node: Move from node.
       /// @return heapNode&: Reference of new node.
       heapNode &operator=(heapNode &&node);
+
+      /// @brief Swap all node content to passed node.
+      /// @param node passed node
       void swap(heapNode &node);
       bool validInHeap();
+
+      /// @brief Swap nodeInfo_ with passed node.
+      /// @param node passed node
+      /// @return PROCESS_SUCCESS: true, PROCESS_FAILED: false
+      bool swapInfo(heapNode &node);
 
       /// @brief Use smart pointer to keep latest heap position of node.
       std::shared_ptr<nodeInfo>                       nodeInfo_;
@@ -63,6 +71,9 @@ namespace dawn
 
     minixHeap() = default;
     virtual ~minixHeap() = default;
+
+    static void swap(heapNode &node_a, heapNode &node_b);
+
     bool push(std::pair<KEY_T, CONTENT_T> &&dataPair);
     minixHeap::heapNode pushAndGetNode(std::pair<KEY_T, CONTENT_T> &&dataPair);
     std::optional<std::pair<KEY_T, CONTENT_T>> pop();
@@ -116,6 +127,13 @@ namespace dawn
   };
 
   template<typename KEY_T, typename CONTENT_T>
+  void minixHeap<KEY_T, CONTENT_T>::swap(minixHeap<KEY_T, CONTENT_T>::heapNode &node_a, minixHeap<KEY_T, CONTENT_T>::heapNode &node_b)
+  {
+    node_a.swapInfo(node_b);
+    std::swap(node_a.dataPair_, node_b.dataPair_);
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
   bool minixHeap<KEY_T, CONTENT_T>::push(std::pair<KEY_T, CONTENT_T> &&dataPair)
   {
     this->heapSize_++;
@@ -143,7 +161,7 @@ namespace dawn
     }
 
     heap_[0].nodeInfo_->validInHeap_ = false;
-    std::swap(heap_[0], heap_.back());
+    swap(heap_[0], heap_.back());
     auto ret = std::move(heap_.back());
     heap_.pop_back();
     this->heapSize_--;
@@ -199,7 +217,7 @@ namespace dawn
     }
 
     heap_[heapIndex].nodeInfo_->validInHeap_ = false;
-    std::swap(heap_[heapIndex], heap_[endIndex]);
+    swap(heap_[heapIndex], heap_[endIndex]);
     heap_.pop_back();
     this->heapSize_--;
     heapify(heapIndex);
@@ -246,12 +264,9 @@ namespace dawn
 
   template<typename KEY_T, typename CONTENT_T>
   minixHeap<KEY_T, CONTENT_T>::heapNode::heapNode(heapNode &&node) :
-    nodeInfo_(std::make_shared<nodeInfo>()),
-    dataPair_(std::make_shared<std::pair<KEY_T, CONTENT_T>>())
+    nodeInfo_(std::move(node.nodeInfo_)),
+    dataPair_(std::move(node.dataPair_))
   {
-    std::swap((dataPair_), (node.dataPair_));
-    std::swap(nodeInfo_, node.nodeInfo_);
-    *node.nodeInfo_ = *nodeInfo_;
   }
 
   template<typename KEY_T, typename CONTENT_T>
@@ -265,10 +280,7 @@ namespace dawn
   template<typename KEY_T, typename CONTENT_T>
   typename minixHeap<KEY_T, CONTENT_T>::heapNode& minixHeap<KEY_T, CONTENT_T>::heapNode::operator=(heapNode &&node)
   {
-    //Keep nodeInfo_ value of passed node in itself. In case of losing nodeInfo_ value.
-    std::swap(nodeInfo_, node.nodeInfo_);
-    std::swap(*(nodeInfo_), *(node.nodeInfo_));
-
+    nodeInfo_ = std::move(node.nodeInfo_);
     dataPair_ = std::move(node.dataPair_);
     return *this;
   }
@@ -278,13 +290,23 @@ namespace dawn
   {
     std::swap(node.dataPair_, dataPair_);
     std::swap(nodeInfo_, node.nodeInfo_);
-    std::swap(*nodeInfo_, *node.nodeInfo_);
   }
 
   template<typename KEY_T, typename CONTENT_T>
   bool minixHeap<KEY_T, CONTENT_T>::heapNode::validInHeap()
   {
     return nodeInfo_->validInHeap_;
+  }
+
+  template<typename KEY_T, typename CONTENT_T>
+  bool minixHeap<KEY_T, CONTENT_T>::heapNode::swapInfo(heapNode &node)
+  {
+    if (node.nodeInfo_ == nullptr || nodeInfo_ == nullptr)
+    {
+      return PROCESS_FAIL;
+    }
+    std::swap(*nodeInfo_, *node.nodeInfo_);
+    return PROCESS_SUCCESS;
   }
 
   template<typename KEY_T, typename CONTENT_T>
@@ -349,7 +371,7 @@ namespace dawn
       {
         if (this->heap_[rightChildIndex].dataPair_->first > this->heap_[parentIndex].dataPair_->first)
         {
-          std::swap(this->heap_[rightChildIndex], this->heap_[parentIndex]);
+          minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[rightChildIndex], this->heap_[parentIndex]);
           parentIndex = rightChildIndex;
         }
         else
@@ -361,7 +383,7 @@ namespace dawn
       {
         if (this->heap_[leftChildIndex].dataPair_->first > this->heap_[parentIndex].dataPair_->first)
         {
-          std::swap(this->heap_[leftChildIndex], this->heap_[parentIndex]);
+          minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[leftChildIndex], this->heap_[parentIndex]);
           parentIndex = leftChildIndex;
         }
         else
@@ -390,7 +412,8 @@ namespace dawn
       auto parentIndex = _GET_PARENT_INDEX(childIndex);
       if (this->heap_[parentIndex].dataPair_->first < this->heap_[childIndex].dataPair_->first)
       {
-        std::swap(this->heap_[parentIndex], this->heap_[childIndex]);
+        minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[parentIndex], this->heap_[childIndex]);
+
         childIndex = parentIndex;
       }
       else
@@ -463,7 +486,7 @@ namespace dawn
       {
         if (this->heap_[rightChildIndex].dataPair_->first < this->heap_[parentIndex].dataPair_->first)
         {
-          std::swap(this->heap_[rightChildIndex], this->heap_[parentIndex]);
+          minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[rightChildIndex], this->heap_[parentIndex]);
           parentIndex = rightChildIndex;
         }
         else
@@ -475,7 +498,7 @@ namespace dawn
       {
         if (this->heap_[leftChildIndex].dataPair_->first < this->heap_[parentIndex].dataPair_->first)
         {
-          std::swap(this->heap_[leftChildIndex], this->heap_[parentIndex]);
+          minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[leftChildIndex], this->heap_[parentIndex]);
           parentIndex = leftChildIndex;
         }
         else
@@ -504,7 +527,7 @@ namespace dawn
       auto parentIndex = _GET_PARENT_INDEX(childIndex);
       if (this->heap_[parentIndex].dataPair_->first > this->heap_[childIndex].dataPair_->first)
       {
-        std::swap(this->heap_[parentIndex], this->heap_[childIndex]);
+        minixHeap<KEY_T, CONTENT_T>::swap(this->heap_[parentIndex], this->heap_[childIndex]);
         childIndex = parentIndex;
       }
       else
