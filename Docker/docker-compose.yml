@@ -10,5 +10,5 @@ services:
     # userns_mode: host
     volumes:
       #map host folder to container
-      - /home/bot/Documents/dorabot/code/my_project:/home/DAWN/host_share:rw
-      # - /f/project/git_project/my_project/DAWN_streamMessageSystem:/home/DAWN/workspace:rw
+      # - /home/bot/Documents/dorabot/code/my_project:/home/DAWN/host_share:rw
+      - /f/project/git_project/my_project/DAWN_streamMessageSystem:/home/DAWN/workspace:rw
