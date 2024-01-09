@@ -1,4 +1,4 @@
-FROM ubuntu:focal AS build_base
+FROM ubuntu:jammy AS build_base
 
 ARG USER_NAME=DAWN
 ENV DEBIAN_FRONTEND=noninteractive
@@ -22,7 +22,7 @@ ENTRYPOINT [ "/bin/bash" ]
 # It can not work
 # CMD [ "/bin/bash", "echo '127.0.0.1 docker-desktop' >> /etc/hosts " ]
 
-FROM dawn_base:latest AS build_dependence
+FROM dawn_base AS build_dependence
 
 ARG USER_NAME=DAWN
 ENV DEBIAN_FRONTEND=noninteractive
