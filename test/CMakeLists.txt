@@ -17,6 +17,7 @@ add_executable(
   ${DIR_SRC}/test_comm_func.cpp
   ${DIR_SRC}/test_benchmark.cpp
   ${DIR_SRC}/test_shm_transport.cpp
+  ${DIR_SRC}/test_timer.cpp
 )
 
 add_dependencies(test_dawn common discovery transport)

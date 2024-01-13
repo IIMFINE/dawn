@@ -70,8 +70,7 @@ namespace dawn
     template <typename FUNC_T>
     void setEventThread(FUNC_T&& returnCb)
     {
-      threadList_.emplace_back(\
-        std::make_unique<std::thread>(std::bind(&threadPool::eventDriverThread<FUNC_T>, this, std::forward<FUNC_T>(returnCb))));
+      threadList_.emplace_back(std::make_unique<std::thread>(std::bind(&threadPool::eventDriverThread<FUNC_T>, this, std::forward<FUNC_T>(returnCb))));
     }
 
     template <typename FUNC_T>

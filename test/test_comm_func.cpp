@@ -447,29 +447,29 @@ TEST(test_dawn, test_min_heap_node)
   for (int j = 0; j < 1; j++)
   {
     auto it = heap.pushAndGetNode({ 1, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    EXPECT_EQ((it.node_info_->heap_position_), 0);
     heap.push({ 0, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
     heap.push({ 3, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
     heap.push({ 3, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
     heap.push({ 6, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
 
     heap.push({ 5, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
     heap.push({ 1, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 1);
+    EXPECT_EQ((it.node_info_->heap_position_), 1);
 
     heap.push({ 0, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+    EXPECT_EQ((it.node_info_->heap_position_), 3);
 
     heap.push({ 6, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+    EXPECT_EQ((it.node_info_->heap_position_), 3);
 
     heap.push({ 7, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 3);
+    EXPECT_EQ((it.node_info_->heap_position_), 3);
 
     auto size = heap.size();
     for (int i = 0; i < size; i++)
@@ -493,29 +493,29 @@ TEST(test_dawn, test_max_heap_node)
   for (int j = 0; j < 1; j++)
   {
     auto it = heap.pushAndGetNode({ 1, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    EXPECT_EQ((it.node_info_->heap_position_), 0);
     heap.push({ 0, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 0);
+    EXPECT_EQ((it.node_info_->heap_position_), 0);
     heap.push({ 3, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+    EXPECT_EQ((it.node_info_->heap_position_), 2);
     heap.push({ 3, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+    EXPECT_EQ((it.node_info_->heap_position_), 2);
     heap.push({ 6, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 2);
+    EXPECT_EQ((it.node_info_->heap_position_), 2);
 
     heap.push({ 5, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    EXPECT_EQ((it.node_info_->heap_position_), 5);
     heap.push({ 1, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    EXPECT_EQ((it.node_info_->heap_position_), 5);
 
     heap.push({ 4, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    EXPECT_EQ((it.node_info_->heap_position_), 5);
 
     heap.push({ 6, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    EXPECT_EQ((it.node_info_->heap_position_), 5);
 
     heap.push({ 7, nullptr });
-    EXPECT_EQ((it.nodeInfo_->heapPosition_), 5);
+    EXPECT_EQ((it.node_info_->heap_position_), 5);
 
     auto size = heap.size();
     for (int i = 0; i < size; i++)
@@ -533,21 +533,21 @@ TEST(test_dawn, test_max_heap_node)
 TEST(test_dawn, test_heap_node)
 {
   using namespace dawn;
-  minixHeap<int, void*>::heapNode node1{ 0,std::pair<int, void*>{1, nullptr} };
-  minixHeap<int, void*>::heapNode node2{ 1,std::pair<int, void*>{1, nullptr} };
-  minixHeap<int, void*>::heapNode node3{ 2,std::pair<int, void*>{1, nullptr} };
+  MinixHeap<int, void*>::HeapNode node1{ 0,std::pair<int, void*>{1, nullptr} };
+  MinixHeap<int, void*>::HeapNode node2{ 1,std::pair<int, void*>{1, nullptr} };
+  MinixHeap<int, void*>::HeapNode node3{ 2,std::pair<int, void*>{1, nullptr} };
 
-  minixHeap<int, void*>::swap(node1, node2);
-  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 0);
-  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 1);
+  MinixHeap<int, void*>::swap(node1, node2);
+  EXPECT_EQ(node2.node_info_->heap_position_, 0);
+  EXPECT_EQ(node1.node_info_->heap_position_, 1);
 
-  minixHeap<int, void*>::swap(node2, node3);
-  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 0);
-  EXPECT_EQ(node2.nodeInfo_->heapPosition_, 2);
+  MinixHeap<int, void*>::swap(node2, node3);
+  EXPECT_EQ(node3.node_info_->heap_position_, 0);
+  EXPECT_EQ(node2.node_info_->heap_position_, 2);
 
-  minixHeap<int, void*>::swap(node1, node3);
-  EXPECT_EQ(node1.nodeInfo_->heapPosition_, 0);
-  EXPECT_EQ(node3.nodeInfo_->heapPosition_, 1);
+  MinixHeap<int, void*>::swap(node1, node3);
+  EXPECT_EQ(node1.node_info_->heap_position_, 0);
+  EXPECT_EQ(node3.node_info_->heap_position_, 1);
 }
 
 TEST(test_dawn, test_erase_heap_node)
