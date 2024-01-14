@@ -3,60 +3,72 @@
 
 namespace dawn
 {
-  class funcWrapper
+  class FuncWrapper
   {
-    struct funcWrapperBaseImpl
+    struct FuncWrapperBaseImpl
     {
       virtual void call() = 0;
-      virtual ~funcWrapperBaseImpl() = default;
+      virtual ~FuncWrapperBaseImpl() = default;
     };
 
     template <typename FUNC_T>
-    struct funcWrapperDriveImpl : funcWrapperBaseImpl
+    struct FuncWrapperDriveImpl : FuncWrapperBaseImpl
     {
-      funcWrapperDriveImpl(FUNC_T &&wrapperFunc) : wrapperFunc_m(std::forward<FUNC_T>(wrapperFunc))
+      FuncWrapperDriveImpl(FUNC_T &&wrapper_func) :
+        wrapper_func_(std::forward<FUNC_T>(wrapper_func))
       {
       }
       virtual void call()
       {
-        wrapperFunc_m();
+        wrapper_func_();
       }
-      FUNC_T wrapperFunc_m;
+      FUNC_T wrapper_func_;
     };
 
   public:
-    funcWrapper(const funcWrapper &) = delete;
-    funcWrapper(funcWrapper &) = delete;
-    funcWrapper &operator=(const funcWrapper &) = delete;
+    FuncWrapper(const FuncWrapper &ins) :
+      p_wrapped_func_(ins.p_wrapped_func_)
+    {
 
-    funcWrapper() = default;
-    ~funcWrapper() = default;
+    }
+
+    FuncWrapper &operator=(const FuncWrapper &ins)
+    {
+      p_wrapped_func_ = ins.p_wrapped_func_;
+      return *this;
+    }
+
+    FuncWrapper() = default;
+    ~FuncWrapper() = default;
 
     template <typename FUNC_T>
-    funcWrapper(FUNC_T givenFunc) : p_wrappedFunc(std::move(std::make_unique<funcWrapperDriveImpl<FUNC_T>>(std::move(givenFunc))))
+    FuncWrapper(FUNC_T given_func) :
+      p_wrapped_func_(std::make_shared<FuncWrapperDriveImpl<FUNC_T>>(std::move(given_func)))
     {
     }
 
     // The move construct dont generate by implement.
-    funcWrapper(funcWrapper &&givenFuncWrapper) : p_wrappedFunc(std::move(givenFuncWrapper.p_wrappedFunc))
+    FuncWrapper(FuncWrapper &&given_func_wrapper) :
+      p_wrapped_func_(std::move(given_func_wrapper.p_wrapped_func_))
     {
     }
 
-    funcWrapper &operator=(funcWrapper &&ins)
+    FuncWrapper &operator=(FuncWrapper &&ins)
     {
-      p_wrappedFunc = std::move(ins.p_wrappedFunc);
+      p_wrapped_func_ = std::move(ins.p_wrapped_func_);
       return *this;
     }
 
     auto execFunc()
     {
-      p_wrappedFunc->call();
+      p_wrapped_func_->call();
     }
+
     auto operator()()
     {
       this->execFunc();
     }
-    std::unique_ptr<funcWrapperBaseImpl> p_wrappedFunc;
+    std::shared_ptr<FuncWrapperBaseImpl> p_wrapped_func_;
   };
 
 };

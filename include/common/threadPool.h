@@ -30,7 +30,7 @@ namespace dawn
     struct workQueue_t
     {
       std::mutex queueMutex;
-      std::vector<funcWrapper> workQueue;
+      std::vector<FuncWrapper> workQueue;
     };
 
     threadPool() = default;
@@ -82,7 +82,7 @@ namespace dawn
     template <typename T, std::enable_if_t<dawn::is_callable<T>::value, int> = 0>
     int pushWorkQueueImpl(T &&workTask)
     {
-      auto p_LF_node = new LF_node_t<funcWrapper>(std::forward<T>(workTask));
+      auto p_LF_node = new LF_node_t<FuncWrapper>(std::forward<T>(workTask));
       taskStack_.pushNode(p_LF_node);
       should_wakeup_.store(true, std::memory_order_release);
       taskNumber_.fetch_add(1, std::memory_order_release);
@@ -101,7 +101,7 @@ namespace dawn
     void runAllThreads();
 
     private:
-    bool popWorkQueue(funcWrapper &taskNode);
+      bool popWorkQueue(FuncWrapper &taskNode);
     void workThreadRun();
 
     private:
@@ -110,7 +110,7 @@ namespace dawn
     std::mutex threadListMutex_;
     std::atomic_int taskNumber_ = 0;
     std::atomic_bool should_wakeup_ = false;
-    lockFreeStack<funcWrapper> taskStack_;
+    lockFreeStack<FuncWrapper> taskStack_;
     std::condition_variable threadCond_;
     std::vector<std::unique_ptr<std::thread>> threadList_;
   };

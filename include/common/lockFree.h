@@ -12,12 +12,14 @@ namespace dawn
   template <typename T>
   struct LF_node_t
   {
-    LF_node_t() : elementVal_(nullptr),
+    LF_node_t() :
+      elementVal_(nullptr),
                   next_(nullptr)
     {
     }
 
-    LF_node_t(T &&val) : elementVal_(std::forward<T>(val)),
+    LF_node_t(T &&val) :
+      elementVal_(std::forward<T>(val)),
       next_(nullptr)
     {
     }

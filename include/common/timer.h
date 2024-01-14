@@ -3,127 +3,180 @@
 
 #include "heap.h"
 #include "threadPool.h"
-#include "funcWrapper.h"
+#include "FuncWrapper.h"
 #include "hazardPointer.h"
 
 #include <chrono>
 
 namespace dawn
 {
-  struct intervalUnit
+  struct IntervalUnit
   {
-    intervalUnit() = delete;
-    virtual ~intervalUnit() = default;
-    explicit intervalUnit(std::chrono::steady_clock::time_point timeout) :
-      timeout_(timeout)
+    IntervalUnit() = default;
+    virtual ~IntervalUnit() = default;
+    explicit IntervalUnit(std::chrono::steady_clock::time_point timeout) : timeout_(timeout)
     {
     }
 
-    bool operator<(const intervalUnit &other) const
+    std::chrono::steady_clock::time_point getTimerOut()
     {
-      if (timeout_ < other.timeout_)
-      {
-        return true;
-      }
-      else
-      {
-        return false;
-      }
+      return timeout_;
     }
 
-    bool operator>(const intervalUnit &other) const
+    void setTimerOut(std::chrono::steady_clock::time_point timeout)
     {
-      if (timeout_ > other.timeout_)
-      {
-        return true;
-      }
-      else
-      {
-        return false;
-      }
+      timeout_ = timeout;
     }
+
+    /// @brief Return the interval time in nanoseconds.
+    /// @return Return the interval time in nanoseconds.
+    virtual std::chrono::nanoseconds getInterval() = 0;
+
+    struct IntervalLessOpt
+    {
+      bool operator()(const IntervalUnit &lhs, const IntervalUnit &rhs) const
+      {
+        if (lhs.timeout_ < rhs.timeout_)
+        {
+          return true;
+        }
+        else
+        {
+          return false;
+        }
+      }
+
+      bool operator()(const std::shared_ptr<IntervalUnit> &lhs, const std::shared_ptr<IntervalUnit> &rhs) const
+      {
+        if ((*lhs).timeout_ < (*rhs).timeout_)
+        {
+          return true;
+        }
+        else
+        {
+          return false;
+        }
+      }
+    };
 
     std::chrono::steady_clock::time_point timeout_;
   };
 
-  template<typename INTERVAL_T>
-  struct concreteIntervalUnit : public intervalUnit
+  template <typename INTERVAL_T>
+  struct ConcreteIntervalUnit : public IntervalUnit
   {
-    concreteIntervalUnit() = delete;
-    ~concreteIntervalUnit() = default;
+    ConcreteIntervalUnit() = delete;
+    ~ConcreteIntervalUnit() = default;
 
-    concreteIntervalUnit(INTERVAL_T interval) :
-      intervalUnit(std::chrono::steady_clock::now() + interval),
+    ConcreteIntervalUnit(INTERVAL_T interval) : IntervalUnit(std::chrono::steady_clock::now() + interval),
       interval_(interval)
     {
+    }
+
+    std::chrono::nanoseconds getInterval()
+    {
+      return std::chrono::duration_cast<std::chrono::nanoseconds>(interval_);
     }
 
     INTERVAL_T interval_;
   };
 
-
-  // struct eventTimerCompanion : public enable_shared_from_this<eventTimerCompanion>
-  // {
-  //   eventTimerCompanion() = default;
-  //   ~eventTimerCompanion();
-  //   bool addEvent(funcWrapper callback);
-  //   bool unregisterEvent();
-  // };
-
-  template<typename INTERVAL_UNIT>
-  struct eventTimer
+  struct EventTimer
   {
-    eventTimer() :
-      isRunning_(true)
+    EventTimer() :
+      is_running_(true),
+      min_interval_(std::chrono::seconds(1))
     {
-      threadPool_ = threadPoolManager_.createThreadPool(2);
-      threadPoolManager_.threadPoolExecute();
-      timerCallbackMinHeap_ = std::make_unique<minHeap<intervalUnit, funcWrapper>>();
+      thread_pool_ = thread_pool_manager_.createThreadPool(2);
+      thread_pool_manager_.threadPoolExecute();
+      timer_callback_min_heap_ = std::make_unique<MinHeap<std::shared_ptr<IntervalUnit>, FuncWrapper, IntervalUnit::IntervalLessOpt>>();
+      thread_pool_->setEventThread([this]() {
+        //It will stuck until timer destruct.
+        this->timerEventLoop();
+        return PROCESS_SUCCESS;
+        });
     }
 
-    ~eventTimer()
+    ~EventTimer()
     {
-      threadPoolManager_.threadPoolDestroy();
+      is_running_.store(false, std::memory_order_release);
+      thread_pool_manager_.threadPoolDestroy();
     }
 
-    eventTimer(const eventTimer &timer) = delete;
-    eventTimer& operator=(const eventTimer &timer) = delete;
+    EventTimer(const EventTimer &timer) = delete;
+    EventTimer &operator=(const EventTimer &timer) = delete;
     void timerEventLoop()
     {
-      auto func = [&]() {
-        while (isRunning_.load(std::memory_order_acquire) == true)
+      while (is_running_.load(std::memory_order_acquire) == true)
+      {
         {
+          std::unique_lock<std::mutex> lock(heap_mutex_);
+          if (timer_callback_min_heap_->top().has_value())
           {
-            std::shared_lock<std::shared_mutex>   lock(timerCallbackMinHeap_->mutex_);
-            auto heapNode = timerCallbackMinHeap_->top();
-            if (heapNode.has_value())
+            auto now = std::chrono::steady_clock::now();
+            if (now > timer_callback_min_heap_->top().value()->first->getTimerOut())
             {
-              auto now = std::chrono::steady_clock::now();
-              if (now > heapNode.value()->first)
+              auto heapNode = timer_callback_min_heap_->pop();
+              lock.unlock();
+
+              auto cb = heapNode.value().second;
+              thread_pool_->pushWorkQueue(std::move(cb));
+              heapNode.value().first->setTimerOut(now + std::chrono::duration_cast<std::chrono::nanoseconds>(heapNode.value().first->getInterval()));
+
               {
-                threadPool_->pushWorkQueue(std::move(heapNode.value()->second));
+                std::unique_lock<std::mutex> lock(heap_mutex_);
+                timer_callback_min_heap_->push(std::move(heapNode.value()));
               }
+              continue;
             }
           }
         }
-        };
-    }
 
-    template<typename INTERVAL_T>
-    bool addEvent(funcWrapper &&cb, INTERVAL_T interval)
-    {
-      {
-        std::unique_lock<std::shared_mutex> lock(timerCallbackMinHeap_->mutex_);
-        timerCallbackMinHeap_->push(std::make_pair(std::chrono::steady_clock::now() + interval, std::move(cb)));
+        std::this_thread::sleep_for(min_interval_);
       }
     }
 
-    private:
-    std::atomic<bool>                                   isRunning_;
-    threadPoolManager                                   threadPoolManager_;
-    std::shared_ptr<threadPool>                         threadPool_;
-    std::mutex                                          heapMutex_;
-    std::unique_ptr<minHeap<uint32_t, funcWrapper>>     timerCallbackMinHeap_;
+    template <typename INTERVAL_T>
+    bool addEvent(FuncWrapper &&cb, INTERVAL_T interval)
+    {
+      {
+        std::unique_lock<std::mutex> lock(heap_mutex_);
+        if (timer_callback_min_heap_->push(std::make_pair(std::make_shared<ConcreteIntervalUnit<INTERVAL_T>>(interval), std::move(cb))) == PROCESS_SUCCESS)
+        {
+          if (min_interval_ > std::chrono::duration_cast<std::chrono::nanoseconds>(interval))
+          {
+            min_interval_ = std::chrono::duration_cast<std::chrono::nanoseconds>(interval);
+          }
+          return PROCESS_SUCCESS;
+        }
+        else
+        {
+          return PROCESS_FAIL;
+        }
+      }
+    }
+
+    bool activateTimer()
+    {
+      is_running_.store(true, std::memory_order_release);
+      return PROCESS_SUCCESS;
+    }
+
+    bool deactivateTimer()
+    {
+      is_running_.store(false, std::memory_order_release);
+      return PROCESS_SUCCESS;
+    }
+
+  private:
+    std::atomic<bool> is_running_;
+    threadPoolManager thread_pool_manager_;
+    std::shared_ptr<threadPool> thread_pool_;
+    std::mutex heap_mutex_;
+    std::unique_ptr<MinHeap<std::shared_ptr<IntervalUnit>, FuncWrapper, IntervalUnit::IntervalLessOpt>> timer_callback_min_heap_;
+
+    // the minimum interval time of the timer.
+    std::chrono::nanoseconds min_interval_;
   };
-} //namespace dawn
+} // namespace dawn
 #endif

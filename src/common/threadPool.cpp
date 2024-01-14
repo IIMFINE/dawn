@@ -66,7 +66,7 @@ namespace dawn
     runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
   }
 
-  bool threadPool::popWorkQueue(funcWrapper &taskNode)
+  bool threadPool::popWorkQueue(FuncWrapper &taskNode)
   {
     auto LF_stackNode = taskStack_.popNodeWithHazard();
     if (LF_stackNode != nullptr)
@@ -98,7 +98,7 @@ namespace dawn
         should_wakeup_.store(false, std::memory_order_release);
       }
       stackLock.unlock();
-      funcWrapper taskNode;
+      FuncWrapper taskNode;
       if (runThreadFlag_ != ENUM_THREAD_STATUS::EXIT)
       {
         for (; taskNumber_.load(std::memory_order_acquire) != 0;)

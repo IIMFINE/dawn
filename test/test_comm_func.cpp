@@ -9,6 +9,8 @@
 #include "common/baseOperator.h"
 #include "common/heap.h"
 
+using namespace dawn::test;
+
 TEST(test_dawn, test_thread_pool)
 {
   using namespace dawn;
@@ -333,7 +335,7 @@ TEST(test_dawn, test_memory_benchmark)
 TEST(test_dawn, test_min_heap)
 {
   using namespace dawn;
-  minHeap<int, void*> heap;
+  MinHeap<int, void*> heap;
   for (int j = 0; j < 3; j++)
   {
     heap.push({ 5, nullptr });
@@ -350,7 +352,7 @@ TEST(test_dawn, test_min_heap)
     for (int i = 0; i < size; i++)
     {
       auto top = heap.top();
-      auto [key, value] = top.value();
+      auto [key, value] = *(top.value());
       std::cout << key << " ";
       heap.pop();
     }
@@ -375,7 +377,7 @@ TEST(test_dawn, test_min_heap)
   for (int i = 0; i < 9; i++)
   {
     auto top = heap2.top();
-    auto [key, value] = top.value();
+    auto [key, value] = *(top.value());
     std::cout << key << " ";
     output.push_back(key);
     heap2.pop();
@@ -387,7 +389,7 @@ TEST(test_dawn, test_min_heap)
 TEST(test_dawn, test_max_heap)
 {
   using namespace dawn;
-  maxHeap<int, void*> heap;
+  MaxHeap<int, void*> heap;
   for (int j = 0; j < 3; j++)
   {
     heap.push({ 5, nullptr });
@@ -404,7 +406,7 @@ TEST(test_dawn, test_max_heap)
     for (int i = 0; i < size; i++)
     {
       auto top = heap.top();
-      auto [key, value] = top.value();
+      auto [key, value] = *(top.value());
       std::cout << key << " ";
       heap.pop();
     }
@@ -429,7 +431,7 @@ TEST(test_dawn, test_max_heap)
   for (int i = 0; i < 9; i++)
   {
     auto top = heap2.top();
-    auto [key, value] = top.value();
+    auto [key, value] = *(top.value());
     std::cout << key << " ";
     output.push_back(key);
     heap2.pop();
@@ -443,7 +445,7 @@ TEST(test_dawn, test_min_heap_node)
 {
   using namespace dawn;
 
-  minHeap<int, void*> heap;
+  MinHeap<int, void*> heap;
   for (int j = 0; j < 1; j++)
   {
     auto it = heap.pushAndGetNode({ 1, nullptr });
@@ -475,7 +477,7 @@ TEST(test_dawn, test_min_heap_node)
     for (int i = 0; i < size; i++)
     {
       auto top = heap.top();
-      auto [key, value] = top.value();
+      auto [key, value] = *(top.value());
       std::cout << key << " ";
       heap.pop();
     }
@@ -489,7 +491,7 @@ TEST(test_dawn, test_max_heap_node)
 {
   using namespace dawn;
 
-  maxHeap<int, void*> heap;
+  MaxHeap<int, void*> heap;
   for (int j = 0; j < 1; j++)
   {
     auto it = heap.pushAndGetNode({ 1, nullptr });
@@ -521,7 +523,7 @@ TEST(test_dawn, test_max_heap_node)
     for (int i = 0; i < size; i++)
     {
       auto top = heap.top();
-      auto [key, value] = top.value();
+      auto [key, value] = *(top.value());
       std::cout << key << " ";
       heap.pop();
     }
@@ -554,7 +556,7 @@ TEST(test_dawn, test_erase_heap_node)
 {
   using namespace dawn;
 
-  maxHeap<int, void*> heap;
+  MaxHeap<int, void*> heap;
   std::vector<int>  result;
   for (int j = 0; j < 1; j++)
   {
@@ -573,7 +575,7 @@ TEST(test_dawn, test_erase_heap_node)
     for (int i = 0, size = heap.size(); i < size; i++)
     {
       auto top = heap.top();
-      auto [key, value] = top.value();
+      auto [key, value] = *(top.value());
       std::cout << key << " ";
       result.push_back(key);
       heap.pop();
