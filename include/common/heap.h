@@ -98,7 +98,7 @@ namespace dawn
 
     bool push(std::pair<KEY_T, CONTENT_T> &&data_pair);
     MinixHeap::HeapNode pushAndGetNode(std::pair<KEY_T, CONTENT_T> &&data_pair);
-    std::optional<std::pair<KEY_T, CONTENT_T>> pop();
+    std::optional<std::shared_ptr<std::pair<KEY_T, CONTENT_T>>> pop();
     std::optional<std::shared_ptr<std::pair<KEY_T, CONTENT_T>>> top();
     bool empty();
     int size();
@@ -185,7 +185,7 @@ namespace dawn
   }
 
   template <typename KEY_T, typename CONTENT_T>
-  std::optional<std::pair<KEY_T, CONTENT_T>> MinixHeap<KEY_T, CONTENT_T>::pop()
+  std::optional<std::shared_ptr<std::pair<KEY_T, CONTENT_T>>>    MinixHeap<KEY_T, CONTENT_T >::pop()
   {
     if (this->heap_size_ == 0)
     {
@@ -200,12 +200,12 @@ namespace dawn
 
     if (this->heap_size_ <= 1)
     {
-      return std::make_optional(std::move(*(ret.data_pair_)));
+      return std::make_optional(std::move((ret.data_pair_)));
     }
     else
     {
       heapify(0);
-      return std::make_optional(std::move(*(ret.data_pair_)));
+      return std::make_optional(std::move((ret.data_pair_)));
     }
   }
 

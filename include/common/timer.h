@@ -119,13 +119,13 @@ namespace dawn
               auto heapNode = timer_callback_min_heap_->pop();
               lock.unlock();
 
-              auto cb = heapNode.value().second;
+              auto cb = heapNode.value()->second;
               thread_pool_->pushWorkQueue(std::move(cb));
-              heapNode.value().first->setTimerOut(now + std::chrono::duration_cast<std::chrono::nanoseconds>(heapNode.value().first->getInterval()));
+              heapNode.value()->first->setTimerOut(now + std::chrono::duration_cast<std::chrono::nanoseconds>(heapNode.value()->first->getInterval()));
 
               {
                 std::unique_lock<std::mutex> lock(heap_mutex_);
-                timer_callback_min_heap_->push(std::move(heapNode.value()));
+                timer_callback_min_heap_->push(std::move(*heapNode.value()));
               }
               continue;
             }
