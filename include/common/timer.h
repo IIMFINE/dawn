@@ -5,8 +5,10 @@
 #include "threadPool.h"
 #include "FuncWrapper.h"
 #include "hazardPointer.h"
+#include "setLogger.h"
 
 #include <chrono>
+#include <condition_variable>
 
 namespace dawn
 {
@@ -18,7 +20,7 @@ namespace dawn
     {
     }
 
-    std::chrono::steady_clock::time_point getTimerOut()
+    std::chrono::steady_clock::time_point getTimeOutValue()
     {
       return timeout_;
     }
@@ -84,11 +86,10 @@ namespace dawn
   struct EventTimer
   {
     EventTimer() :
-      is_running_(true),
+      is_running_(false),
       min_interval_(std::chrono::seconds(1))
     {
-      thread_pool_ = thread_pool_manager_.createThreadPool(2);
-      thread_pool_manager_.threadPoolExecute();
+      thread_pool_ = thread_pool_manager_.createThreadPool(1);
       timer_callback_min_heap_ = std::make_unique<MinHeap<std::shared_ptr<IntervalUnit>, FuncWrapper, IntervalUnit::IntervalLessOpt>>();
       thread_pool_->setEventThread([this]() {
         //It will stuck until timer destruct.
@@ -99,8 +100,7 @@ namespace dawn
 
     ~EventTimer()
     {
-      is_running_.store(false, std::memory_order_release);
-      thread_pool_manager_.threadPoolDestroy();
+      destroyTimer();
     }
 
     EventTimer(const EventTimer &timer) = delete;
@@ -114,25 +114,29 @@ namespace dawn
           if (timer_callback_min_heap_->top().has_value())
           {
             auto now = std::chrono::steady_clock::now();
-            if (now > timer_callback_min_heap_->top().value()->first->getTimerOut())
+            if (now > timer_callback_min_heap_->top().value()->first->getTimeOutValue())
             {
               auto heapNode = timer_callback_min_heap_->pop();
-              lock.unlock();
-
               auto cb = heapNode.value()->second;
               thread_pool_->pushWorkQueue(std::move(cb));
               heapNode.value()->first->setTimerOut(now + std::chrono::duration_cast<std::chrono::nanoseconds>(heapNode.value()->first->getInterval()));
 
-              {
-                std::unique_lock<std::mutex> lock(heap_mutex_);
-                timer_callback_min_heap_->push(std::move(*heapNode.value()));
-              }
+              timer_callback_min_heap_->push(std::move(*heapNode.value()));
               continue;
             }
           }
         }
 
-        std::this_thread::sleep_for(min_interval_);
+        std::chrono::nanoseconds min_interval;
+
+        {
+          std::unique_lock<std::mutex> lock(min_interval_mutex_);
+          min_interval = min_interval_;
+        }
+
+        // stuck until timeout or new event add.
+        std::unique_lock<std::mutex> lock(cv_mutex_);
+        cv_.wait_for(lock, min_interval);
       }
     }
 
@@ -143,10 +147,15 @@ namespace dawn
         std::unique_lock<std::mutex> lock(heap_mutex_);
         if (timer_callback_min_heap_->push(std::make_pair(std::make_shared<ConcreteIntervalUnit<INTERVAL_T>>(interval), std::move(cb))) == PROCESS_SUCCESS)
         {
-          if (min_interval_ > std::chrono::duration_cast<std::chrono::nanoseconds>(interval))
           {
-            min_interval_ = std::chrono::duration_cast<std::chrono::nanoseconds>(interval);
+            std::unique_lock<std::mutex> lock(min_interval_mutex_);
+            if (min_interval_ > std::chrono::duration_cast<std::chrono::nanoseconds>(interval))
+            {
+              min_interval_ = std::chrono::duration_cast<std::chrono::nanoseconds>(interval);
+            }
           }
+
+          cv_.notify_one();
           return PROCESS_SUCCESS;
         }
         else
@@ -159,12 +168,23 @@ namespace dawn
     bool activateTimer()
     {
       is_running_.store(true, std::memory_order_release);
+      thread_pool_manager_.threadPoolExecute();
       return PROCESS_SUCCESS;
     }
 
     bool deactivateTimer()
     {
       is_running_.store(false, std::memory_order_release);
+      thread_pool_manager_.threadPoolHalt();
+      cv_.notify_all();
+      return PROCESS_SUCCESS;
+    }
+
+    bool destroyTimer()
+    {
+      is_running_.store(false, std::memory_order_release);
+      thread_pool_manager_.threadPoolDestroy();
+      cv_.notify_all();
       return PROCESS_SUCCESS;
     }
 
@@ -174,7 +194,9 @@ namespace dawn
     std::shared_ptr<threadPool> thread_pool_;
     std::mutex heap_mutex_;
     std::unique_ptr<MinHeap<std::shared_ptr<IntervalUnit>, FuncWrapper, IntervalUnit::IntervalLessOpt>> timer_callback_min_heap_;
-
+    std::mutex cv_mutex_;
+    std::condition_variable  cv_;
+    std::mutex min_interval_mutex_;
     // the minimum interval time of the timer.
     std::chrono::nanoseconds min_interval_;
   };

@@ -1,6 +1,7 @@
 #include "test_helper.h"
 #include "common/heap.h"
 #include "common/timer.h"
+#include "common/setLogger.h"
 
 #include "gtest/gtest.h"
 #include <iostream>
@@ -99,37 +100,28 @@ TEST(test_dawn, dawn_timer_construct)
   using namespace dawn;
   EventTimer timer;
 
-  int test_num = 100;
-  //run 60 seconds
-  int duration = 10;
+  //run 11000 milliseconds
+  int duration_ms = 11000;
+  int test_num = duration_ms % 1000;
 
-  int base_add_result = test_num * duration;
-  std::atomic<int> test_sum = 0;
+  int base_add_result = duration_ms % 1000;
+  std::atomic<int> test_index = 0;
 
   for (int i = 1; i < test_num; ++i)
   {
     timer.addEvent(
-      [i, &test_sum]() {
-        test_sum++;
-        // std::cout << "hello world " << i << "  " << std::chrono::steady_clock::now().time_since_epoch().count() << std::endl;
+      [i, &test_index]() {
+        int current_sum = test_index.load();
+        test_index++;
       },
       std::chrono::seconds(1)
     );
   }
 
-  // for (int i = 1; i < test_num; ++i)
-  // {
-  //   timer.addEvent(
-  //     [i]() {
-  //       std::cout << "hello world milliseconds " << i << "  " << std::chrono::steady_clock::now().time_since_epoch().count() << std::endl;
-  //     },
-  //     std::chrono::milliseconds(i)
-  //   );
-  // }
+  timer.activateTimer();
+  std::this_thread::sleep_for(std::chrono::milliseconds(duration_ms + 100));
 
-  std::this_thread::sleep_for(std::chrono::seconds(duration));
-
-  EXPECT_EQ(test_sum.load(), base_add_result);
+  EXPECT_EQ(test_index.load(), base_add_result);
 }
 
 

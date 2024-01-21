@@ -118,7 +118,6 @@ namespace dawn
   protected:
     uint32_t heap_size_ = 0;
     std::vector<typename MinixHeap<KEY_T, CONTENT_T>::HeapNode> heap_;
-    std::shared_mutex heap_mutex_;
   };
 
   template <typename KEY_T, typename CONTENT_T, typename COMPARATOR = ::dawn::less<KEY_T>>

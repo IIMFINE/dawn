@@ -19,7 +19,7 @@ namespace dawn
 
   class threadPool
   {
-    public:
+  public:
     enum class ENUM_THREAD_STATUS
     {
       STOP,
@@ -48,18 +48,18 @@ namespace dawn
     {
       while (1)
       {
-        if (runThreadFlag_ == ENUM_THREAD_STATUS::RUN)
+        if (run_thread_flag_ == ENUM_THREAD_STATUS::RUN)
         {
           if (pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
           {
             LOG_ERROR("push work task to queue wrong");
           }
         }
-        else if (runThreadFlag_ == ENUM_THREAD_STATUS::STOP)
+        else if (run_thread_flag_ == ENUM_THREAD_STATUS::STOP)
         {
           std::this_thread::yield();
         }
-        else if (runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+        else if (run_thread_flag_ == ENUM_THREAD_STATUS::EXIT)
         {
           LOG_WARN("event thread exit");
           break;
@@ -100,12 +100,12 @@ namespace dawn
     void haltAllThreads();
     void runAllThreads();
 
-    private:
-      bool popWorkQueue(FuncWrapper &taskNode);
+  private:
+    bool popWorkQueue(FuncWrapper &taskNode);
     void workThreadRun();
 
-    private:
-    volatile ENUM_THREAD_STATUS runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
+  private:
+    volatile ENUM_THREAD_STATUS run_thread_flag_ = ENUM_THREAD_STATUS::STOP;
     std::mutex queueMutex_;
     std::mutex threadListMutex_;
     std::atomic_int taskNumber_ = 0;
@@ -117,7 +117,7 @@ namespace dawn
 
   class threadPoolManager
   {
-    public:
+  public:
     threadPoolManager() = default;
     ~threadPoolManager() = default;
     template <typename... executeTask_t>
@@ -129,15 +129,15 @@ namespace dawn
       {
         std::initializer_list<int>{(spyThreadPool->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
       }
-      spyThreadPoolGroup_.push_back(spyThreadPool);
+      thread_pool_group_.push_back(spyThreadPool);
       return spyThreadPool;
     }
     void threadPoolExecute();
     void threadPoolHalt();
     void threadPoolDestroy();
 
-    private:
-    std::vector<std::shared_ptr<threadPool>> spyThreadPoolGroup_;
+  private:
+    std::vector<std::shared_ptr<threadPool>> thread_pool_group_;
   };
 
 };
