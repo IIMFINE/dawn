@@ -6,6 +6,8 @@
 #include <x86intrin.h>
 #include "common/baseOperator.h"
 
+using namespace dawn::test;
+
 TEST(test_dawn, cycles_counter_correction)
 {
   using namespace dawn;

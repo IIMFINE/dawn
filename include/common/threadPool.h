@@ -1,12 +1,13 @@
 #ifndef _THREAD_FUNC_H_
 #define _THREAD_FUNC_H_
 
-#include "type.h"
 #include <mutex>
 #include <thread>
 #include <vector>
 #include <condition_variable>
 #include <list>
+
+#include "type.h"
 #include "setLogger.h"
 #include "funcWrapper.h"
 #include "lockFree.h"
@@ -18,7 +19,7 @@ namespace dawn
 
   class threadPool
   {
-    public:
+  public:
     enum class ENUM_THREAD_STATUS
     {
       STOP,
@@ -29,7 +30,7 @@ namespace dawn
     struct workQueue_t
     {
       std::mutex queueMutex;
-      std::vector<funcWrapper> workQueue;
+      std::vector<FuncWrapper> workQueue;
     };
 
     threadPool() = default;
@@ -47,18 +48,18 @@ namespace dawn
     {
       while (1)
       {
-        if (runThreadFlag_ == ENUM_THREAD_STATUS::RUN)
+        if (run_thread_flag_ == ENUM_THREAD_STATUS::RUN)
         {
           if (pushWorkQueue(returnCb()) != PROCESS_SUCCESS)
           {
             LOG_ERROR("push work task to queue wrong");
           }
         }
-        else if (runThreadFlag_ == ENUM_THREAD_STATUS::STOP)
+        else if (run_thread_flag_ == ENUM_THREAD_STATUS::STOP)
         {
           std::this_thread::yield();
         }
-        else if (runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+        else if (run_thread_flag_ == ENUM_THREAD_STATUS::EXIT)
         {
           LOG_WARN("event thread exit");
           break;
@@ -69,8 +70,7 @@ namespace dawn
     template <typename FUNC_T>
     void setEventThread(FUNC_T&& returnCb)
     {
-      threadList_.emplace_back(\
-        std::make_unique<std::thread>(std::bind(&threadPool::eventDriverThread<FUNC_T>, this, std::forward<FUNC_T>(returnCb))));
+      threadList_.emplace_back(std::make_unique<std::thread>(std::bind(&threadPool::eventDriverThread<FUNC_T>, this, std::forward<FUNC_T>(returnCb))));
     }
 
     template <typename FUNC_T>
@@ -82,7 +82,7 @@ namespace dawn
     template <typename T, std::enable_if_t<dawn::is_callable<T>::value, int> = 0>
     int pushWorkQueueImpl(T &&workTask)
     {
-      auto p_LF_node = new LF_node_t<funcWrapper>(std::forward<T>(workTask));
+      auto p_LF_node = new LF_node_t<FuncWrapper>(std::forward<T>(workTask));
       taskStack_.pushNode(p_LF_node);
       should_wakeup_.store(true, std::memory_order_release);
       taskNumber_.fetch_add(1, std::memory_order_release);
@@ -100,43 +100,44 @@ namespace dawn
     void haltAllThreads();
     void runAllThreads();
 
-    private:
-    bool popWorkQueue(funcWrapper &taskNode);
+  private:
+    bool popWorkQueue(FuncWrapper &taskNode);
     void workThreadRun();
 
-    private:
-    volatile ENUM_THREAD_STATUS runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
+  private:
+    volatile ENUM_THREAD_STATUS run_thread_flag_ = ENUM_THREAD_STATUS::STOP;
     std::mutex queueMutex_;
     std::mutex threadListMutex_;
     std::atomic_int taskNumber_ = 0;
     std::atomic_bool should_wakeup_ = false;
-    lockFreeStack<funcWrapper> taskStack_;
+    lockFreeStack<FuncWrapper> taskStack_;
     std::condition_variable threadCond_;
     std::vector<std::unique_ptr<std::thread>> threadList_;
   };
 
   class threadPoolManager
   {
-    public:
+  public:
     threadPoolManager() = default;
     ~threadPoolManager() = default;
     template <typename... executeTask_t>
-    void createThreadPool(int workThreadNum = 1, executeTask_t &&...executeTasks)
+    std::shared_ptr<threadPool> createThreadPool(int workThreadNum = 1, executeTask_t &&...executeTasks)
     {
-      auto spyThreadPool_ptr = std::make_unique<threadPool>();
-      spyThreadPool_ptr->init(workThreadNum);
+      auto spyThreadPool = std::make_shared<threadPool>();
+      spyThreadPool->init(workThreadNum);
       if (sizeof...(executeTasks) != 0)
       {
-        std::initializer_list<int>{(spyThreadPool_ptr->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
+        std::initializer_list<int>{(spyThreadPool->setEventThread(std::forward<executeTask_t>(executeTasks)), 0)...};
       }
-      spyThreadPoolGroup_.push_back(std::move(spyThreadPool_ptr));
+      thread_pool_group_.push_back(spyThreadPool);
+      return spyThreadPool;
     }
     void threadPoolExecute();
     void threadPoolHalt();
     void threadPoolDestroy();
 
-    private:
-    std::vector<std::unique_ptr<threadPool>> spyThreadPoolGroup_;
+  private:
+    std::vector<std::shared_ptr<threadPool>> thread_pool_group_;
   };
 
 };

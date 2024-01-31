@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(dawn VERSION 0.1.0)
 
 # support output symbol, c++17 and perf.
-add_compile_options(-Wall -g -fomit-frame-pointer)
+add_compile_options(-Wall -Werror -Wno-unused-variable -g -fomit-frame-pointer)
 set(CMAKE_CXX_STANDARD 17)
 
 # For build share library

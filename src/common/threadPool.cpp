@@ -30,7 +30,7 @@ namespace dawn
   {
     int                     lastTaskNum = 0xffff;
     constexpr uint32_t      watchSpanTime = 2;
-    for (; runThreadFlag_ != ENUM_THREAD_STATUS::EXIT;)
+    for (; run_thread_flag_ != ENUM_THREAD_STATUS::EXIT;)
     {
       if (taskNumber_.load(std::memory_order_acquire) > lastTaskNum)
       {
@@ -43,7 +43,7 @@ namespace dawn
 
   void threadPool::quitAllThreads()
   {
-    runThreadFlag_ = ENUM_THREAD_STATUS::EXIT;
+    run_thread_flag_ = ENUM_THREAD_STATUS::EXIT;
     threadCond_.notify_all();
     std::lock_guard<std::mutex>     lock(threadListMutex_);
     for (auto &threadIter : threadList_)
@@ -58,15 +58,15 @@ namespace dawn
 
   void threadPool::runAllThreads()
   {
-    runThreadFlag_ = ENUM_THREAD_STATUS::RUN;
+    run_thread_flag_ = ENUM_THREAD_STATUS::RUN;
   }
 
   void threadPool::haltAllThreads()
   {
-    runThreadFlag_ = ENUM_THREAD_STATUS::STOP;
+    run_thread_flag_ = ENUM_THREAD_STATUS::STOP;
   }
 
-  bool threadPool::popWorkQueue(funcWrapper &taskNode)
+  bool threadPool::popWorkQueue(FuncWrapper &taskNode)
   {
     auto LF_stackNode = taskStack_.popNodeWithHazard();
     if (LF_stackNode != nullptr)
@@ -82,12 +82,12 @@ namespace dawn
 
   void threadPool::workThreadRun()
   {
-    for (; runThreadFlag_ != ENUM_THREAD_STATUS::EXIT;)
+    for (; run_thread_flag_ != ENUM_THREAD_STATUS::EXIT;)
     {
       std::unique_lock<std::mutex> stackLock(queueMutex_);
       // avoid spurious wakeup
       threadCond_.wait(stackLock, [this]() {
-        if ((taskNumber_.load(std::memory_order_acquire) > 0 && should_wakeup_.load(std::memory_order_acquire) == true) || runThreadFlag_ == ENUM_THREAD_STATUS::EXIT)
+        if ((taskNumber_.load(std::memory_order_acquire) > 0 && should_wakeup_.load(std::memory_order_acquire) == true) || run_thread_flag_ == ENUM_THREAD_STATUS::EXIT)
         {
           return true;
         }
@@ -98,8 +98,8 @@ namespace dawn
         should_wakeup_.store(false, std::memory_order_release);
       }
       stackLock.unlock();
-      funcWrapper taskNode;
-      if (runThreadFlag_ != ENUM_THREAD_STATUS::EXIT)
+      FuncWrapper taskNode;
+      if (run_thread_flag_ != ENUM_THREAD_STATUS::EXIT)
       {
         for (; taskNumber_.load(std::memory_order_acquire) != 0;)
         {
@@ -118,7 +118,7 @@ namespace dawn
 
   void threadPoolManager::threadPoolExecute()
   {
-    for (auto &it : spyThreadPoolGroup_)
+    for (auto &it : thread_pool_group_)
     {
       it->runAllThreads();
     }
@@ -126,7 +126,7 @@ namespace dawn
 
   void threadPoolManager::threadPoolHalt()
   {
-    for (auto &it : spyThreadPoolGroup_)
+    for (auto &it : thread_pool_group_)
     {
       it->haltAllThreads();
     }
@@ -134,7 +134,7 @@ namespace dawn
 
   void threadPoolManager::threadPoolDestroy()
   {
-    for (auto &it : spyThreadPoolGroup_)
+    for (auto &it : thread_pool_group_)
     {
       it->quitAllThreads();
     }

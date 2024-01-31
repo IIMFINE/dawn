@@ -1,7 +1,8 @@
 #include <iostream>
+#include <unistd.h>
+
 #include "type.h"
 #include "net.h"
-#include <unistd.h>
 #include "threadPool.h"
 
 int main()
