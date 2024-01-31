@@ -22,7 +22,7 @@ namespace dawn
     std::stringstream filename;
     std::stringstream logger_name;
     auto time_info = logManager_t::return_timestamp();
-    strftime(timestamp, sizeof(timestamp), "_%m_%d_%H_%M_%S_", time_info);
+    strftime(timestamp, sizeof(timestamp), "_%y%m%d_%H_%M_%S_", time_info);
     if (prefix_filename.empty())
     {
       filename << timestamp << ".log";
@@ -42,12 +42,12 @@ namespace dawn
     }
 
     spd_logger_ = spdlog::basic_logger_mt<spdlog::async_factory>(logger_name.str(), filename.str());
-    ///@brief format [second:nanosecond][log level][thread id][source file][line] content
-    spd_logger_->set_pattern("[%S:%F][%L][%t][%s][%#] %2v");
+
+    spd_logger_->set_pattern("[%H%M%S:%F][%L][%t][%s:%#] %v");
     spd_logger_->set_level(spdlog::level::debug);
     spdlog::set_default_logger(spd_logger_);
     spd_logger_->flush_on(spdlog::level::debug);
-    spd_logger_->info("format [second:nanosecond][log level][thread id][source file][line] content");
+    spd_logger_->info("format [second:nanosecond][log level][thread id][source file:line] content");
   }
 
   logManager_t& logManager_t::return_log_manager()

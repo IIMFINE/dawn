@@ -161,7 +161,8 @@ namespace dawn
 
     //set the TTL (time to live) for the send
     constexpr unsigned char ttl = 1;
-    if (setsockopt(sendBindFd_, IPPROTO_IP, IP_MULTICAST_TTL, &ttl, sizeof(ttl)) < 0)
+    //Use SOL_SOCKET to set SO_* flag
+    if (setsockopt(sendBindFd_, SOL_SOCKET, SO_REUSEADDR, &ttl, sizeof(ttl)) < 0)
     {
       LOG_ERROR("can not set ttl {}", ttl);
       return PROCESS_FAIL;
@@ -175,7 +176,7 @@ namespace dawn
       LOG_DEBUG("info: now try to bind the this ip {}", ipAddr);
 
       // don't need to bind a local interface
-      if (setsockopt(sendBindFd_, IPPROTO_IP, IP_MULTICAST_IF, &translateIp.sin_addr, sizeof(translateIp.sin_addr)) < 0)
+      if (setsockopt(sendBindFd_, IPPROTO_IP, IP_MULTICAST_IF | IP_MULTICAST_TTL, &translateIp.sin_addr, sizeof(translateIp.sin_addr)) < 0)
       {
         LINUX_ERROR_PRINT();
         LOG_ERROR("can not set {} to multicast sock", ipAddr);

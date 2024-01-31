@@ -4,24 +4,24 @@
 #include <atomic>
 namespace dawn
 {
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerQueue;
 
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerContainer;
 
-  template <typename T>
-  struct registerThreadToQueue;
+  template <typename T, typename ID_T>
+  struct registerHazardToQueue;
 
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerContainerHeader_t;
 
-  template <typename T>
-  struct registerThreadToQueue
+  template <typename T, typename ID_T>
+  struct registerHazardToQueue
   {
-    hazardPointerContainer<T> *localContainer_;
-    std::shared_ptr<hazardPointerContainerHeader_t<T>> queue_header_;
-    registerThreadToQueue(std::shared_ptr<hazardPointerContainerHeader_t<T>> &header) : localContainer_(nullptr),
+    hazardPointerContainer<T, ID_T> *localContainer_;
+    std::shared_ptr<hazardPointerContainerHeader_t<T, ID_T>> queue_header_;
+    registerHazardToQueue(std::shared_ptr<hazardPointerContainerHeader_t<T, ID_T>> &header, ID_T id) : localContainer_(nullptr),
                                                                                         queue_header_(header)
     {
       auto tempContainerIndex = queue_header_->next_.load(std::memory_order_acquire);
@@ -36,10 +36,10 @@ namespace dawn
         {
           for (; !tempContainerIndex;)
           {
-            std::thread::id defaultThreadId;
-            if (tempContainerIndex->thread_id_.load(std::memory_order_acquire) == defaultThreadId)
+            ID_T defaultId = ID_T();
+            if (tempContainerIndex->id_.load(std::memory_order_acquire) == defaultId)
             {
-              if (tempContainerIndex->thread_id_.compare_exchange_strong(defaultThreadId, std::this_thread::get_id()))
+              if (tempContainerIndex->id_.compare_exchange_strong(defaultId, id))
               {
                 this->localContainer_ = tempContainerIndex;
                 return;
@@ -55,7 +55,7 @@ namespace dawn
     void insertHazardPointQueue()
     {
       auto tempContainerIndex = queue_header_->next_.load(std::memory_order_acquire);
-      auto newContainer = new hazardPointerContainer<T>();
+      auto newContainer = new hazardPointerContainer<T, ID_T>();
       while (1)
       {
         // When initializing hazard pointer queue, there are only push operations.
@@ -68,33 +68,47 @@ namespace dawn
       }
     }
 
-    ~registerThreadToQueue()
+    ~registerHazardToQueue()
     {
       localContainer_->resetContainer();
     }
   };
 
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerContainer
   {
-    hazardPointerContainer<T> *next_;
+    hazardPointerContainer<T, ID_T> *next_;
     std::atomic<T> value_;
-    std::atomic<std::thread::id> thread_id_;
+    std::atomic<ID_T> id_;
 
-    hazardPointerContainer() : next_(nullptr),
-                               thread_id_(std::this_thread::get_id())
+    hazardPointerContainer() = default;
+
+    hazardPointerContainer(ID_T id) :
+      next_(nullptr),
+      id_(id)
     {
     }
-    hazardPointerContainer(T value) : value_(value),
-                                      next_(nullptr),
-                                      thread_id_(std::this_thread::get_id())
+    hazardPointerContainer(T value, ID_T id) :
+      value_(value),
+      next_(nullptr),
+      id_(id)
     {
+    }
+
+    void setId(ID_T id)
+    {
+      id_.store(id, std::memory_order_release);
+    }
+
+    void setValue(T value)
+    {
+      value_.store(value, std::memory_order_release);
     }
 
     void resetContainer()
     {
       value_.exchange(T());
-      thread_id_.exchange(std::thread::id());
+      id_.exchange(ID_T());
     }
 
     void resetValue()
@@ -108,34 +122,32 @@ namespace dawn
     }
   };
 
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerContainerHeader_t
   {
     hazardPointerContainerHeader_t() = default;
     ~hazardPointerContainerHeader_t() = default;
-    std::atomic<hazardPointerContainer<T> *> next_;
+    std::atomic<hazardPointerContainer<T, ID_T> *> next_;
   };
 
-  template <typename T>
+  template <typename T, typename ID_T>
   struct hazardPointerQueue
   {
     hazardPointerQueue();
     ~hazardPointerQueue();
     auto &getHeader();
-    bool findConflictPointer(T value);
-    bool setHazardPointer(T value);
-    bool removeHazardPointer();
-    hazardPointerContainer<T> *getThreadLocalContainer();
-    std::shared_ptr<hazardPointerContainerHeader_t<T>> p_header_;
+    bool findConflictPointer(ID_T excludeId, T value);
+    std::shared_ptr<registerHazardToQueue<T, ID_T>> getContainer(ID_T id);
+    std::shared_ptr<hazardPointerContainerHeader_t<T, ID_T>> p_header_;
   };
 
-  template <typename T>
-  hazardPointerQueue<T>::hazardPointerQueue() : p_header_(std::make_shared<hazardPointerContainerHeader_t<T>>())
+  template <typename T, typename ID_T>
+  hazardPointerQueue<T, ID_T>::hazardPointerQueue() : p_header_(std::make_shared<hazardPointerContainerHeader_t<T, ID_T>>())
   {
   }
 
-  template <typename T>
-  hazardPointerQueue<T>::~hazardPointerQueue()
+  template <typename T, typename ID_T>
+  hazardPointerQueue<T, ID_T>::~hazardPointerQueue()
   {
     auto headIndex = this->getHeader()->next_.load(std::memory_order_acquire);
     if (headIndex != nullptr)
@@ -149,24 +161,62 @@ namespace dawn
     }
   }
 
-  template <typename T>
-  auto &hazardPointerQueue<T>::getHeader()
+  template <typename T, typename ID_T>
+  auto &hazardPointerQueue<T, ID_T>::getHeader()
   {
     return p_header_;
   }
 
-  template <typename T>
-  hazardPointerContainer<T>* hazardPointerQueue<T>::getThreadLocalContainer()
+  template <typename T, typename ID_T>
+  bool hazardPointerQueue<T, ID_T>::findConflictPointer(ID_T excludeId, T value)
   {
-    thread_local registerThreadToQueue<T> registerContainer(this->getHeader());
-    return registerContainer.localContainer_;
+    for (auto containerIndex = this->getHeader()->next_.load(std::memory_order_acquire);
+      containerIndex != nullptr;
+      containerIndex = containerIndex->next_)
+    {
+      if (containerIndex->id_ != excludeId && containerIndex->value_.load(std::memory_order_acquire) == value)
+      {
+        return false;
+      }
+    }
+    return true;
+
+  }
+
+  template <typename T, typename ID_T>
+  std::shared_ptr<registerHazardToQueue<T, ID_T>> hazardPointerQueue<T, ID_T>::getContainer(ID_T id)
+  {
+    auto registerContainer = std::make_shared<registerHazardToQueue<T, ID_T>>(this->getHeader(), id);
+    return registerContainer;
   }
 
   template <typename T>
-  bool hazardPointerQueue<T>::setHazardPointer(T value)
+  struct threadLocalHazardPointerQueue : public hazardPointerQueue<T, std::thread::id>
+  {
+    threadLocalHazardPointerQueue() = default;
+    ~threadLocalHazardPointerQueue() = default;
+    hazardPointerContainer<T, std::thread::id>* getThreadLocalContainer();
+    bool findConflictPointer(T value);
+    bool setHazardPointer(T value);
+    bool removeHazardPointer();
+  };
+
+  template <typename T>
+  hazardPointerContainer<T, std::thread::id>* threadLocalHazardPointerQueue<T>::getThreadLocalContainer()
+  {
+    thread_local registerHazardToQueue<T, std::thread::id> registerContainer(this->getHeader(), std::this_thread::get_id());
+    return registerContainer.localContainer_;
+  }
+
+  /// @brief Set the hazard pointer value.
+  /// @tparam T 
+  /// @param value: hazard value
+  /// @return true
+  template <typename T>
+  bool threadLocalHazardPointerQueue<T>::setHazardPointer(T value)
   {
     auto localContainer = this->getThreadLocalContainer();
-    localContainer->value_.store(value, std::memory_order_release);
+    localContainer->setValue(value);
     return true;
   }
 
@@ -175,22 +225,18 @@ namespace dawn
   /// @param value
   /// @return true: not found, false: found the hazard pointer
   template <typename T>
-  bool hazardPointerQueue<T>::findConflictPointer(T value)
+  bool threadLocalHazardPointerQueue<T>::findConflictPointer(T value)
   {
-    for (auto containerIndex = this->getHeader()->next_.load(std::memory_order_acquire);
-      containerIndex != nullptr;
-      containerIndex = containerIndex->next_)
-    {
-      if (containerIndex->thread_id_ != std::this_thread::get_id() && containerIndex->value_.load(std::memory_order_acquire) == value)
-      {
-        return false;
-      }
-    }
-    return true;
+    auto localContainer = this->getThreadLocalContainer();
+    auto localId = localContainer->id_.load(std::memory_order_acquire);
+    return this->hazardPointerQueue<T, std::thread::id>::findConflictPointer(localId, value);
   }
 
+  /// @brief Remove the hazard pointer from queue.
+  /// @tparam T 
+  /// @return true.
   template <typename T>
-  bool hazardPointerQueue<T>::removeHazardPointer()
+  bool threadLocalHazardPointerQueue<T>::removeHazardPointer()
   {
     auto localContainer = this->getThreadLocalContainer();
     localContainer->resetValue();

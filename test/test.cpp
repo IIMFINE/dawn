@@ -3,6 +3,7 @@
 
 namespace dawn
 {
+  using namespace ::dawn::test;
   std::map<std::string, unsigned int> timeCounter::timeSpan_{};
   std::map<std::string, uint64_t> cyclesCounter::timeSpan_{};
 }

@@ -548,15 +548,16 @@ TEST(test_boost, test_lock_release_twice)
 TEST(test_boost, test_shared_lock_cost)
 {
   using namespace BI;
+  using namespace dawn::test;
   named_sharable_mutex mut(open_or_create, "hello_world_dawn");
   uint32_t total_time = 100000;
   for (uint32_t i = 0; i < total_time; ++i)
   {
     {
-      dawn::cyclesCounter counter("lock_shared");
+      cyclesCounter counter("lock_shared");
       sharable_lock<named_sharable_mutex> lock2(mut);
     }
-    total_time += dawn::cyclesCounter::getTimeSpan("lock_shared");
+    total_time += cyclesCounter::getTimeSpan("lock_shared");
   }
   std::cout << "total_time: " << total_time / total_time << std::endl;
 }

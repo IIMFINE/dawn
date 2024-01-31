@@ -3,9 +3,11 @@
 #include <atomic>
 #include <list>
 #include <cassert>
+
 #include "lockFree.h"
 #include "type.h"
 #include "setLogger.h"
+
 namespace dawn
 {
   //BASE block size is 128byte which is satisfied with multiple of cache line buffer.
