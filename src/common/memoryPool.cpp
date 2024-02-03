@@ -1,9 +1,10 @@
 #include <iostream>
+#include <cassert>
+
 #include "memoryPool.h"
 #include "stdlib.h"
 #include "string.h"
 #include "baseOperator.h"
-#include <cassert>
 
 namespace dawn
 {

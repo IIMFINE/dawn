@@ -1,12 +1,16 @@
+#include "test_helper.h"
+#include "common/threadPool.h"
+#include "common/memoryPool.h"
+#include "common/baseOperator.h"
+#include "common/heap.h"
+
 #include "gtest/gtest.h"
 #include <chrono>
 #include <thread>
 #include <future>
 
-#include "test_helper.h"
-#include "common/threadPool.h"
-#include "common/memoryPool.h"
-#include "common/baseOperator.h"
+
+using namespace dawn::test;
 
 TEST(test_dawn, test_thread_pool)
 {
@@ -17,7 +21,7 @@ TEST(test_dawn, test_thread_pool)
     pool.runAllThreads();
     auto test_func = []() {
       std::cout << "test_func" << std::endl;
-    };
+      };
     pool.pushWorkQueue(test_func);
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
@@ -62,32 +66,32 @@ TEST(test_dawn, dawn_multiple_thread_memory_pool_benchmark)
   allocMem(1);
 
   auto func = [&]()
-  {
-    auto loop_time_2 = loop_time;
-    uint64_t total_time_span = 0;
-    while (runFlag == false)
     {
-      std::this_thread::yield();
-    }
-    for (uint32_t i = 1; i < loop_time; i++)
-    {
+      auto loop_time_2 = loop_time;
+      uint64_t total_time_span = 0;
+      while (runFlag == false)
       {
-        cyclesCounter  counter("dawn_alloc");
-        for (int j = 1900;j < 2048;j++)
-        {
-          auto p1 = allocMem(j);
-          auto p2 = allocMem(j);
-          freeMem(p1);
-          freeMem(p2);
-        }
+        std::this_thread::yield();
       }
-      total_time_span += cyclesCounter::getTimeSpan("dawn_alloc");
-    }
-    uint64_t avg_time_span = total_time_span / loop_time_2;
-    std::cout << "dawn memory pool spend time " << avg_time_span << " cycles" << std::endl;
-    LOG_INFO("dawn memory pool spend time {} cycles", avg_time_span);
-    exitFlag = true;
-  };
+      for (uint32_t i = 1; i < loop_time; i++)
+      {
+        {
+          cyclesCounter  counter("dawn_alloc");
+          for (int j = 1900;j < 2048;j++)
+          {
+            auto p1 = allocMem(j);
+            auto p2 = allocMem(j);
+            freeMem(p1);
+            freeMem(p2);
+          }
+        }
+        total_time_span += cyclesCounter::getTimeSpan("dawn_alloc");
+      }
+      uint64_t avg_time_span = total_time_span / loop_time_2;
+      std::cout << "dawn memory pool spend time " << avg_time_span << " cycles" << std::endl;
+      LOG_INFO("dawn memory pool spend time {} cycles", avg_time_span);
+      exitFlag = true;
+    };
   std::thread(func).detach();
   std::thread(func).detach();
   std::thread(func).detach();
@@ -170,6 +174,7 @@ TEST(test_dawn, benchmark_GET_MEM_QUEUE_MASK)
     {
       cyclesCounter counter("GET_MEM_QUEUE_MASK");
       int a = GET_MEM_QUEUE_MASK(127);
+      (void)a;
     }
     total_time_span += cyclesCounter::getTimeSpan("GET_MEM_QUEUE_MASK");
   }
@@ -228,23 +233,23 @@ TEST(test_dawn, malloc_multiple_thread_benchmark)
   allocMem(1);
 
   auto func = [&]()
-  {
-    unsigned long total_time_span = 0;
-    while (runFlag == false)
     {
-      std::this_thread::yield();
-    }
-    for (uint32_t i = 0; i < loop_time; i++)
-    {
+      unsigned long total_time_span = 0;
+      while (runFlag == false)
       {
-        timeCounter  counter("malloc");
-        auto p = malloc(128);
-        free(p);
+        std::this_thread::yield();
       }
-      total_time_span += timeCounter::getTimeSpan("malloc");
-    }
-    LOG_INFO("dawn malloc spend time {} ns", total_time_span / loop_time);
-  };
+      for (uint32_t i = 0; i < loop_time; i++)
+      {
+        {
+          timeCounter  counter("malloc");
+          auto p = malloc(128);
+          free(p);
+        }
+        total_time_span += timeCounter::getTimeSpan("malloc");
+      }
+      LOG_INFO("dawn malloc spend time {} ns", total_time_span / loop_time);
+    };
   std::thread(func).detach();
   std::thread(func).detach();
   std::thread(func).detach();

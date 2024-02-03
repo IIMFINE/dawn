@@ -1,0 +1,12 @@
+{
+  "C_Cpp.formatting": "vcFormat",
+  "editor.formatOnSaveMode": "modifications",
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "C_Cpp.vcFormat.newLine.closeBraceSameLine.emptyFunction": true,
+  "C_Cpp.vcFormat.newLine.closeBraceSameLine.emptyType": true,
+  "C_Cpp.vcFormat.newLine.scopeBracesOnSeparateLines": true,
+  "C_Cpp.vcFormat.indent.accessSpecifiers": false,
+  "C_Cpp.clang_format_style": "Visual Studio",
+  "C_Cpp.vcFormat.newLine.beforeOpenBrace.type": "newLine"
+}

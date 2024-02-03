@@ -2,6 +2,7 @@
 #define _LOCK_FREE_H_
 #include <atomic>
 #include <thread>
+
 #include "type.h"
 #include "hazardPointer.h"
 #include "setLogger.h"
@@ -11,12 +12,14 @@ namespace dawn
   template <typename T>
   struct LF_node_t
   {
-    LF_node_t() : elementVal_(nullptr),
+    LF_node_t() :
+      elementVal_(nullptr),
                   next_(nullptr)
     {
     }
 
-    LF_node_t(T &&val) : elementVal_(std::forward<T>(val)),
+    LF_node_t(T &&val) :
+      elementVal_(std::forward<T>(val)),
       next_(nullptr)
     {
     }
@@ -30,7 +33,7 @@ namespace dawn
   class lockFreeStack
   {
     std::atomic<LF_node_t<T> *> LF_queueHead_;
-    hazardPointerQueue<LF_node_t<T> *> hazardPointerQueue_;
+    threadLocalHazardPointerQueue<LF_node_t<T> *> hazardPointerQueue_;
 
   public:
     lockFreeStack();
@@ -82,8 +85,8 @@ namespace dawn
         do
         {
           headNode = oldNode;
-          hazardPointerQueue_.setHazardPointer(headNode);
           oldNode = LF_queueHead_.load(std::memory_order_acquire);
+          hazardPointerQueue_.setHazardPointer(oldNode);
         } while (oldNode != headNode);
         if (oldNode != nullptr && LF_queueHead_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
         {
