@@ -19,7 +19,10 @@ add_executable(
   ${DIR_SRC}/test_shm_transport.cpp
   ${DIR_SRC}/test_timer.cpp
   ${DIR_SRC}/test_heap.cpp
+  ${DIR_SRC}/test_inotify.cpp
 )
+
+target_compile_options(test_dawn PRIVATE -std=c++17 -g -O0 -Wall -Werror -Wno-unused-variable -Wno-unused-function)
 
 add_dependencies(test_dawn common discovery transport)
 
@@ -37,6 +40,7 @@ TARGET_LINK_LIBRARIES(test_dawn
   $<TARGET_OBJECTS:transport>
   pthread
   rt
+  stdc++fs
   ${ADD_THIRD_PARTY_LIB}
 ) # CMAKE_SOURCE_DIR is the root entrance CMakeLists.txt directory
 set(EXECUTABLE_OUTPUT_PATH ${CMAKE_SOURCE_DIR}/../bin)
