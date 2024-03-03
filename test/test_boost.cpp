@@ -457,6 +457,7 @@ TEST(test_boost, test_mutex_remove)
 
 struct test_anonymous
 {
+  std::mutex                mutex_;
   BI::interprocess_mutex    mutex_1_;
   BI::interprocess_mutex    mutex_2_;
 };
@@ -560,4 +561,25 @@ TEST(test_boost, test_shared_lock_cost)
     total_time += cyclesCounter::getTimeSpan("lock_shared");
   }
   std::cout << "total_time: " << total_time / total_time << std::endl;
+}
+
+/// @brief result: std::mutex can not work at interprocess
+TEST(test_boost, test_std_lock_in_boost_shm)
+{
+  using namespace BI;
+  shared_memory_object  shm(BI::open_or_create, "test_shm", read_write);
+  shm.truncate(sizeof(test_anonymous));
+  mapped_region region(shm, read_write);
+  auto addr = region.get_address();
+  auto test_anonymous_ptr = new (addr) test_anonymous;
+
+  std::cout << "wait to lock" << std::endl;
+  std::lock_guard<std::mutex>  lock(test_anonymous_ptr->mutex_);
+  std::cout << "lock end" << std::endl;
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  while (1)
+  {
+    std::this_thread::yield();
+  }
 }
