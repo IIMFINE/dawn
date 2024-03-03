@@ -48,8 +48,10 @@ write_basic_package_version_file(
   COMPATIBILITY AnyNewerVersion
 )
 
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+# include .h head file
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/
   DESTINATION include/dawn
+  FILES_MATCHING PATTERN "*.h"
 )
 
 install(TARGETS ${lib_name}
