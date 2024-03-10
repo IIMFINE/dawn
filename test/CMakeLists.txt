@@ -9,7 +9,7 @@ set(PROJECT_SOURCE_FILE_PATH ${CMAKE_SOURCE_DIR}/src)
 set(DIR_SRC ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(GTest CONFIG REQUIRED)
 
-set(ADD_THIRD_PARTY_LIB GTest::gtest)
+set(ADD_THIRD_PARTY_LIB GTest::gtest libasan.a)
 
 file(GLOB_RECURSE TEST_CASE_SOURCE_FILES "${CMAKE_SOURCE_DIR}/src/*test*.cpp")
 
@@ -29,7 +29,7 @@ add_executable(
   ${TEST_CASE_SOURCE_FILES}
 )
 
-target_compile_options(test_dawn PRIVATE -std=c++17 -g -O0 -Wall -Werror -Wno-unused-variable -Wno-unused-function)
+target_compile_options(test_dawn PRIVATE -std=c++17 -g -O0 -Wall -Werror -Wno-unused-variable -Wno-unused-function -fsanitize=address)
 
 add_dependencies(test_dawn dawn)
 

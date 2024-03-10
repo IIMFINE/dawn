@@ -386,12 +386,16 @@ namespace dawn
 
   int tcpAcceptor::recvFromSocket(char *recvData, size_t dataBuffLen)
   {
-    if (acceptFd_ > 0)
+    if (acceptFd_ <= 0)
     {
-      // todo: change to use TLV method, must consider about image and other type file transport, expect of text file.
-      fgets(recvData, dataBuffLen, readFd_);
-
-      return PROCESS_SUCCESS;
+      return PROCESS_FAIL;
+    }
+    // todo: change to use TLV method, must consider about image and other type file transport, expect of text file.
+    if (fgets(recvData, dataBuffLen, readFd_) == nullptr)
+    {
+      LINUX_ERROR_PRINT();
+      LOG_WARN("the tcp socket {} is disconnect", acceptFd_);
+      return PROCESS_FAIL;
     }
     return PROCESS_SUCCESS;
   }

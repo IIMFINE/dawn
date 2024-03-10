@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <sys/inotify.h>
 #include <errno.h>
+#include <sys/ioctl.h>
+
 
 #include <iostream>
 #include <filesystem>
@@ -178,3 +180,89 @@ TEST(test_boost, interprocess_condition)
   BoostInterprocessTest *test = segment.construct<BoostInterprocessTest>("test")();
   test->start_test();
 }
+
+TEST(test_inotify, inotify_feature)
+{
+  constexpr const char filename[] = "/tmp/test_inotify_open_file";
+
+  auto open_file = [filename]() {
+    std::ofstream ofs(filename, std::ios::app);
+    ofs.close();
+    };
+
+  if (!fs::exists(filename))
+  {
+    std::ofstream ofs(filename);
+    ofs.close();
+  }
+
+  int fd = inotify_init();
+  ASSERT_NE(fd, -1);
+  int wd = inotify_add_watch(fd, filename, IN_CREATE | IN_DELETE | IN_OPEN);
+
+  auto read_inotify_fd = [&]() {
+    uint32_t    avail = 0;
+
+    ioctl(fd, FIONREAD, &avail);
+
+    std::cout << "avail " << avail << std::endl;
+
+    char buffer[avail];
+    auto len = read(fd, buffer, sizeof(buffer));
+    // auto len = read(fd, nullptr, 0);
+
+    if (len == -1)
+    {
+      std::cout << "read error" << std::endl;
+      return;
+    }
+    else
+    {
+      std::cout << "start len " << len << std::endl;
+    }
+
+    //print inotify event
+    struct inotify_event *event = (struct inotify_event *)buffer;
+
+    if (event->mask & IN_CREATE)
+    {
+      std::cout << "file created" << std::endl;
+    }
+    if (event->mask & IN_DELETE)
+    {
+      std::cout << "file deleted" << std::endl;
+    }
+    if (event->mask & IN_MODIFY)
+    {
+      std::cout << "file modified" << std::endl;
+    }
+    if (event->mask & IN_OPEN)
+    {
+      std::cout << "file opened" << std::endl;
+    }
+    std::cout << "wd: " << event->wd << std::endl;
+    std::cout << "event len " << event->len << std::endl;
+    };
+
+  open_file();
+
+  // std::cout<<"read inotify fd"<<std::endl;
+  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+  open_file();
+  open_file();
+  read_inotify_fd();
+
+  open_file();
+  open_file();
+  open_file();
+  open_file();
+  read_inotify_fd();
+
+
+  read_inotify_fd();
+
+  int ret = inotify_rm_watch(fd, wd);
+  ASSERT_EQ(ret, 0);
+}
+
