@@ -8,3 +8,4 @@ gdb
 iproute2
 libboost-all-dev
 gdbserver
+htop
