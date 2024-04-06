@@ -25,18 +25,26 @@ ENTRYPOINT [ "/bin/bash" ]
 FROM dawn_base AS build_dependence
 
 ARG USER_NAME=DAWN
+ARG SPDLOG_REPO=https://github.com/gabime/spdlog.git
+ARG GTEST_REPO=https://github.com/google/googletest.git
 ENV DEBIAN_FRONTEND=noninteractive
+
+# Set proxy for git clone
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ENV http_proxy=$HTTP_PROXY
+ENV https_proxy=$HTTPS_PROXY
 
 USER root
 
 #github repository can be changed. Now it is a proxy hub for China user.
-RUN git clone https://ghps.cc/https://github.com/gabime/spdlog.git \
+RUN git clone ${SPDLOG_REPO} \
   && mkdir /spdlog/build \
   && cd /spdlog/build && cmake .. && make -j$(nproc) && make install -j$(nproc)\
   && rm -rf /spdlog
 
 #github repository can be changed. Now it is a proxy hub for China user.
-RUN git clone https://ghps.cc/https://github.com/google/googletest.git \
+RUN git clone ${GTEST_REPO} \
   && mkdir /googletest/build \
   && cd /googletest/build && cmake .. && make -j$(nproc) && make install -j$(nproc)\
   && rm -rf /googletest
