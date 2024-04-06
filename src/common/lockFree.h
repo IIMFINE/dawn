@@ -3,119 +3,116 @@
 #include <atomic>
 #include <thread>
 
-#include "type.h"
 #include "hazardPointer.h"
 #include "setLogger.h"
+#include "type.h"
 namespace dawn
 {
 
-  template <typename T>
-  struct LF_node_t
-  {
-    LF_node_t() :
-      elementVal_(nullptr),
-                  next_(nullptr)
+    template <typename T>
+    struct LF_Node
+    {
+        LF_Node() : element_val_(nullptr),
+                    next_(nullptr)
+        {
+        }
+
+        LF_Node(T &&val) : element_val_(std::forward<T>(val)),
+                           next_(nullptr)
+        {
+        }
+
+        T element_val_;
+        LF_Node *next_;
+    };
+
+    // dont use smart point which uses too many memory resource
+    template <typename T>
+    class LockFreeStack
+    {
+        std::atomic<LF_Node<T> *> LF_queue_head_;
+        threadLocalHazardPointerQueue<LF_Node<T> *> hazard_pointer_queue_;
+
+    public:
+        LockFreeStack();
+        ~LockFreeStack() = default;
+        void init(LF_Node<T> *queue_head);
+        LF_Node<T> *popNodeWithHazard();
+        void pushNode(LF_Node<T> *node);
+    };
+
+    template <typename T>
+    LockFreeStack<T>::LockFreeStack() : LF_queue_head_(static_cast<LF_Node<T> *>(nullptr))
     {
     }
 
-    LF_node_t(T &&val) :
-      elementVal_(std::forward<T>(val)),
-      next_(nullptr)
+    template <typename T>
+    void LockFreeStack<T>::init(LF_Node<T> *queue_head)
     {
+        LF_queue_head_.store(queue_head);
     }
 
-    T elementVal_;
-    LF_node_t *next_;
-  };
-
-  // dont use smart point which uses too many memory resource
-  template <typename T>
-  class lockFreeStack
-  {
-    std::atomic<LF_node_t<T> *> LF_queueHead_;
-    threadLocalHazardPointerQueue<LF_node_t<T> *> hazardPointerQueue_;
-
-  public:
-    lockFreeStack();
-    ~lockFreeStack() = default;
-    void init(LF_node_t<T> *queueHead);
-    LF_node_t<T> *popNodeWithHazard();
-    void pushNode(LF_node_t<T> *node);
-  };
-
-  template <typename T>
-  lockFreeStack<T>::lockFreeStack() : LF_queueHead_(static_cast<LF_node_t<T> *>(nullptr))
-  {
-  }
-
-  template <typename T>
-  void lockFreeStack<T>::init(LF_node_t<T> *queueHead)
-  {
-    LF_queueHead_.store(queueHead);
-  }
-
-  template <typename T>
-  void lockFreeStack<T>::pushNode(LF_node_t<T> *node)
-  {
-    assert(node != nullptr && "a null node can be pushed to queue");
-    auto oldHead = LF_queueHead_.load(std::memory_order_acquire);
-    do
+    template <typename T>
+    void LockFreeStack<T>::pushNode(LF_Node<T> *node)
     {
-      node->next_ = oldHead;
-    } while (!LF_queueHead_.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
-  }
-
-  template <typename T>
-  LF_node_t<T> *lockFreeStack<T>::popNodeWithHazard()
-  {
-    LF_node_t<T> *oldNode = nullptr;
-    LF_node_t<T> *headNode = nullptr;
-
-    // Use hazard pointer to avoid the ABA problem
-    oldNode = LF_queueHead_.load(std::memory_order_acquire);
-    do
-    {
-      if (oldNode == nullptr)
-      {
-        LOG_WARN("load the LF queue head is empty");
-        break;
-      }
-      else
-      {
+        assert(node != nullptr && "a null node can be pushed to queue");
+        auto oldHead = LF_queue_head_.load(std::memory_order_acquire);
         do
         {
-          headNode = oldNode;
-          oldNode = LF_queueHead_.load(std::memory_order_acquire);
-          hazardPointerQueue_.setHazardPointer(oldNode);
-        } while (oldNode != headNode);
-        if (oldNode != nullptr && LF_queueHead_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
-        {
-          // Waiting hazard gone.
-          while (1)
-          {
-            if (hazardPointerQueue_.findConflictPointer(oldNode) == true)
-            {
-              break;
-            }
-            std::this_thread::yield();
-          }
-          break;
-        }
-      }
-    } while (1);
-
-    if (oldNode == nullptr)
-    {
-      LOG_WARN("loop the LF queue to end ");
-      return nullptr;
+            node->next_ = oldHead;
+        } while (!LF_queue_head_.compare_exchange_weak(oldHead, node, std::memory_order_release, std::memory_order_relaxed));
     }
 
-    // Eliminate the hazard
-    hazardPointerQueue_.removeHazardPointer();
-    oldNode->next_ = nullptr;
-    return oldNode;
-  }
+    template <typename T>
+    LF_Node<T> *LockFreeStack<T>::popNodeWithHazard()
+    {
+        LF_Node<T> *oldNode = nullptr;
+        LF_Node<T> *headNode = nullptr;
 
+        // Use hazard pointer to avoid the ABA problem
+        oldNode = LF_queue_head_.load(std::memory_order_acquire);
+        do
+        {
+            if (oldNode == nullptr)
+            {
+                LOG_WARN("load the LF queue head is empty");
+                break;
+            }
+            else
+            {
+                do
+                {
+                    headNode = oldNode;
+                    oldNode = LF_queue_head_.load(std::memory_order_acquire);
+                    hazard_pointer_queue_.setHazardPointer(oldNode);
+                } while (oldNode != headNode);
+                if (oldNode != nullptr && LF_queue_head_.compare_exchange_strong(oldNode, oldNode->next_, std::memory_order_release, std::memory_order_relaxed))
+                {
+                    // Waiting hazard gone.
+                    while (1)
+                    {
+                        if (hazard_pointer_queue_.findConflictPointer(oldNode) == true)
+                        {
+                            break;
+                        }
+                        std::this_thread::yield();
+                    }
+                    break;
+                }
+            }
+        } while (1);
+
+        if (oldNode == nullptr)
+        {
+            LOG_WARN("loop the LF queue to end ");
+            return nullptr;
+        }
+
+        // Eliminate the hazard
+        hazard_pointer_queue_.removeHazardPointer();
+        oldNode->next_ = nullptr;
+        return oldNode;
+    }
 }
 
 #endif

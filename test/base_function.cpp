@@ -1,37 +1,36 @@
-#include <iostream>
-#include <type_traits>
-#include <vector>
-#include <string>
-#include <tuple>
-#include <list>
-#include <cstdint>
+#include <fcntl.h>
 #include <inttypes.h>
-#include <exception>
-#include <functional>
+#include <sched.h>
+#include <string.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <sys/mman.h>
-#include <string.h>
+
 #include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <iostream>
+#include <list>
 #include <mutex>
+#include <string>
 #include <thread>
-#include <sched.h>
-#include "threadPool.h"
-#include "type.h"
-#include "memoryPool.h"
+#include <tuple>
 #include <type_traits>
-#include <string.h>
 #include <vector>
+
 #include "baseOperator.h"
 #include "hazardPointer.h"
+#include "memoryPool.h"
 #include "setLogger.h"
-#include <chrono>
+#include "threadPool.h"
+#include "type.h"
 
 int main()
 {
-  LOG_DEBUG("Hello world");
+    LOG_DEBUG("Hello world");
 #if 0
     int test_time = 10;
     dawn::memPoolInit();

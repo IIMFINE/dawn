@@ -3,9 +3,8 @@
 namespace dawn
 {
 
-  reliableQosCfg::reliableQosCfg() :
-    qosCfg()
-  {
-    qosType_ = qosCfg::QOS_TYPE::RELIABLE;
-  }
+    reliableQosCfg::reliableQosCfg() : qosCfg()
+    {
+        qosType_ = qosCfg::QOS_TYPE::RELIABLE;
+    }
 }

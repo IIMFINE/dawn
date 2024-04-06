@@ -15,9 +15,9 @@ namespace dawn
       identity_(identity),
       lockMsgOwns_(0)
     {
-      channel_ptr_ = std::make_shared<shmChannel>(CHANNEL_PREFIX + identity_);
+      channel_ptr_ = std::make_shared<shmChannel>(kChannelPrefix + identity_);
       shmPool_ptr_ = std::make_shared<shmMsgPool>();
-      ringBuffer_ptr_ = std::make_shared<shmIndexRingBuffer>(RING_BUFFER_PREFIX + identity_);
+      ringBuffer_ptr_ = std::make_shared<shmIndexRingBuffer>(kRingBufferPrefix + identity_);
       msgShm_raw_ptr_ = shmPool_ptr_->getMsgRawBuffer();
     }
 
@@ -47,15 +47,15 @@ namespace dawn
       {
         auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
         auto msgBlockIns = new(msgBlock) msgType;
-        if (wait2writeLen <= SHM_BLOCK_CONTENT_SIZE)
+        if (wait2writeLen <= kShmBlockContentSize)
         {
           std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, wait2writeLen);
         }
         else
         {
-          std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, SHM_BLOCK_CONTENT_SIZE);
-          wait2writeLen -= SHM_BLOCK_CONTENT_SIZE;
-          written_len += SHM_BLOCK_CONTENT_SIZE;
+          std::memcpy(msgBlockIns->content_, (char*)write_data + written_len, kShmBlockContentSize);
+          wait2writeLen -= kShmBlockContentSize;
+          written_len += kShmBlockContentSize;
         }
 
         if (prev_msg != nullptr)
@@ -280,8 +280,8 @@ namespace dawn
 
     bool recycleMsg(uint32_t msgIndex)
     {
-      assert(msgIndex < SHM_BLOCK_NUM && "msg shm index is out of range");
-      for (;msgIndex != SHM_INVALID_INDEX;)
+      assert(msgIndex < kShmBlockNum && "msg shm index is out of range");
+      for (;msgIndex != kShmInvalidIndex;)
       {
         auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
         auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
@@ -307,25 +307,25 @@ namespace dawn
     {
       auto msgIndex = msgHeadIndex;
       data_len = 0;
-      if (msgIndex == SHM_INVALID_INDEX || msgSize == 0)
+      if (msgIndex == kShmInvalidIndex || msgSize == 0)
       {
         return PROCESS_FAIL;
       }
 
-      for (;msgIndex != SHM_INVALID_INDEX;)
+      for (;msgIndex != kShmInvalidIndex;)
       {
         auto msgBlock = FIND_SHARE_MEM_BLOCK_ADDR(msgShm_raw_ptr_, msgIndex);
         auto msgBlockIns = reinterpret_cast<msgType*>(msgBlock);
 
-        if ((msgSize - data_len) < SHM_BLOCK_CONTENT_SIZE)
+        if ((msgSize - data_len) < kShmBlockContentSize)
         {
           std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, (msgSize - data_len));
           data_len += (msgSize - data_len);
         }
         else
         {
-          std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, SHM_BLOCK_CONTENT_SIZE);
-          data_len += SHM_BLOCK_CONTENT_SIZE;
+          std::memcpy(((char*)read_data + data_len), msgBlockIns->content_, kShmBlockContentSize);
+          data_len += kShmBlockContentSize;
         }
         msgIndex = msgBlockIns->next_;
       }

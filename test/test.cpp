@@ -3,13 +3,13 @@
 
 namespace dawn
 {
-  using namespace ::dawn::test;
-  std::map<std::string, unsigned int> timeCounter::timeSpan_{};
-  std::map<std::string, uint64_t> cyclesCounter::timeSpan_{};
+    using namespace ::dawn::test;
+    std::map<std::string, unsigned int> timeCounter::timeSpan_{};
+    std::map<std::string, uint64_t> cyclesCounter::timeSpan_{};
 }
 
 int main(int argc, char **argv)
 {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

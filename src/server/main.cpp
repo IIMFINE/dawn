@@ -1,9 +1,10 @@
 #include <iostream>
-#include "type.h"
 #include <type_traits>
 #include <vector>
 
+#include "type.h"
+
 int main()
 {
-  return 0;
+    return 0;
 }
