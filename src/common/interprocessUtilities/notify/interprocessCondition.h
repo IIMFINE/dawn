@@ -23,10 +23,10 @@ namespace dawn
         ~InterprocessCondition();
         bool init(std::string_view identity);
         bool wait();
-        bool wait_for(std::chrono::milliseconds timeout_ms);
+        bool waitFor(std::chrono::milliseconds timeout_ms);
         bool wait(std::function<bool(void)> condition);
-        bool wait_for(std::chrono::milliseconds timeout_ms, std::function<bool(void)> condition);
-        bool notify_all();
+        bool waitFor(std::chrono::milliseconds timeout_ms, std::function<bool(void)> condition);
+        bool notifyAll();
 
         std::string inotify_file_path_;
         fd_set select_fds_;

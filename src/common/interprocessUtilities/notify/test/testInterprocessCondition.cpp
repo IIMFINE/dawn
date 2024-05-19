@@ -30,9 +30,9 @@ TEST(test_interprocess_condition, wait_for)
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
 
     std::thread t([&condition]()
-                  { ASSERT_EQ(condition.wait_for(std::chrono::milliseconds(1000)), PROCESS_SUCCESS); });
+                  { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_SUCCESS); });
 
-    condition.notify_all();
+    condition.notifyAll();
     t.join();
 }
 
@@ -43,7 +43,7 @@ TEST(test_interprocess_condition, wait_for_timeout)
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
     std::thread t([&condition]()
-                  { ASSERT_EQ(condition.wait_for(std::chrono::milliseconds(1000)), PROCESS_FAIL); });
+                  { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_FAIL); });
 
     t.join();
 }
@@ -54,7 +54,7 @@ TEST(test_interprocess_condition, notify)
     InterprocessCondition condition;
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
-    ASSERT_EQ(condition.notify_all(), PROCESS_SUCCESS);
+    ASSERT_EQ(condition.notifyAll(), PROCESS_SUCCESS);
 }
 
 TEST(test_interprocess_condition, notify_wait_performance)
@@ -80,7 +80,7 @@ TEST(test_interprocess_condition, notify_wait_performance)
                       {
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
       start_notify = std::chrono::high_resolution_clock::now();
-      ASSERT_EQ(condition.notify_all(), PROCESS_SUCCESS); });
+      ASSERT_EQ(condition.notifyAll(), PROCESS_SUCCESS); });
         ASSERT_EQ(condition.wait(), PROCESS_SUCCESS);
         wait_notify = std::chrono::high_resolution_clock::now();
         t.join();
@@ -103,7 +103,7 @@ TEST(test_interprocess_condition, wait_for_condition)
                                              { return true; }),
                               PROCESS_SUCCESS); });
 
-    condition.notify_all();
+    condition.notifyAll();
     t.join();
 }
 
@@ -119,6 +119,6 @@ TEST(test_interprocess_condition, wait_for_condition_false)
                                              { return false; }),
                               PROCESS_SUCCESS); });
 
-    condition.notify_all();
+    condition.notifyAll();
     t.join();
 }

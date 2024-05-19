@@ -80,7 +80,7 @@ namespace dawn
         return PROCESS_SUCCESS;
     }
 
-    bool InterprocessCondition::wait_for(std::chrono::milliseconds timeout_ms)
+    bool InterprocessCondition::waitFor(std::chrono::milliseconds timeout_ms)
     {
         FD_ZERO(&select_fds_);
         FD_SET(inotify_fd_, &select_fds_);
@@ -135,12 +135,12 @@ namespace dawn
         return PROCESS_SUCCESS;
     }
 
-    bool InterprocessCondition::wait_for(std::chrono::milliseconds timeout_ms, std::function<bool(void)> condition)
+    bool InterprocessCondition::waitFor(std::chrono::milliseconds timeout_ms, std::function<bool(void)> condition)
     {
         auto start = std::chrono::steady_clock::now();
         while (!condition())
         {
-            if (wait_for(timeout_ms) == PROCESS_FAIL)
+            if (waitFor(timeout_ms) == PROCESS_FAIL)
             {
                 return PROCESS_FAIL;
             }
@@ -155,7 +155,7 @@ namespace dawn
         return PROCESS_SUCCESS;
     }
 
-    bool InterprocessCondition::notify_all()
+    bool InterprocessCondition::notifyAll()
     {
         std::ofstream ofs(inotify_file_path_, std::ios::app);
         ofs.close();
