@@ -1,11 +1,18 @@
 #include "setLogger.h"
 
+#include <spdlog/sinks/rotating_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 #include <sstream>
+#include <vector>
+
 #ifdef USE_SPDLOG
 /// @brief avoid multiple definition compile error.
 
 namespace dawn
 {
+    constexpr const char *kSpdlogFmt = "[%H%M%S:%F][%L][%t][%s:%#] %v";
+
     logManager_t::logManager_t()
     {
         init_spdlog();
@@ -23,7 +30,7 @@ namespace dawn
         std::stringstream filename;
         std::stringstream logger_name;
         auto time_info = logManager_t::return_timestamp();
-        strftime(timestamp, sizeof(timestamp), "_%y%m%d_%H_%M_%S_", time_info);
+        strftime(timestamp, sizeof(timestamp), "_%y%m%d_%H_", time_info);
         if (prefix_filename.empty())
         {
             filename << timestamp << ".log";
@@ -35,17 +42,15 @@ namespace dawn
             logger_name << prefix_filename << "dawn_logger";
         }
 
-        std::ifstream log_file(filename.str());
+        auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        console_sink->set_level(spdlog::level::debug);
+        console_sink->set_pattern(kSpdlogFmt);
 
-        if (log_file)
-        {
-            remove(filename.str().c_str());
-        }
+        auto rotating_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(filename.str(), 1024 * 1024 * 10, 3);
 
-        spd_logger_ = spdlog::basic_logger_mt<spdlog::async_factory>(logger_name.str(), filename.str());
+        std::vector<spdlog::sink_ptr> sinks{console_sink, rotating_sink};
+        spd_logger_ = std::make_shared<spdlog::logger>(logger_name.str(), sinks.begin(), sinks.end());
 
-        spd_logger_->set_pattern("[%H%M%S:%F][%L][%t][%s:%#] %v");
-        spd_logger_->set_level(spdlog::level::debug);
         spdlog::set_default_logger(spd_logger_);
         spd_logger_->flush_on(spdlog::level::debug);
         spd_logger_->info("format [second:nanosecond][log level][thread id][source file:line] content");
