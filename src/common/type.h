@@ -4,9 +4,9 @@
 
 #ifndef _TYPE_H_
 #define _TYPE_H_
+#include <cstring>
 #include <functional>
 #include <type_traits>
-
 namespace dawn
 {
 

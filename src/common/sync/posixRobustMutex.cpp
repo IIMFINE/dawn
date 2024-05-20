@@ -6,6 +6,7 @@
 
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 namespace dawn
 {
@@ -97,6 +98,6 @@ namespace dawn
             return PROCESS_SUCCESS;
         }
 
-        throw std::runtime_error("recover failed" + std::string(strerror(result)));
+        throw std::runtime_error("recover failed result: " + std::to_string(result) + " " + std::string(strerror(result)));
     }
 }  // namespace dawn
