@@ -91,22 +91,21 @@ TEST(test_dawn, test_func_jump)
     using namespace dawn;
     unsigned int loop_time = 0xfffffff;
     uint64_t total_time = 0;
-    std::function<void(int)> test_func[2] = {
-        [](int a)
-        {
-            if (a == 2)
-            {
-                std::cout << "hello world" << std::endl;
-            }
-            int b = 1;
-        },
-        [](int a)
-        {
-            if (a == 2)
-            {
-                std::cout << "hello world" << std::endl;
-            }
-        }};
+    std::function<void(int)> test_func[2] = {[](int a)
+                                             {
+                                                 if (a == 2)
+                                                 {
+                                                     std::cout << "hello world" << std::endl;
+                                                 }
+                                                 int b = 1;
+                                             },
+                                             [](int a)
+                                             {
+                                                 if (a == 2)
+                                                 {
+                                                     std::cout << "hello world" << std::endl;
+                                                 }
+                                             }};
     for (unsigned int i = 0; i < loop_time; i++)
     {
         {

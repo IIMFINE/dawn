@@ -7,29 +7,29 @@
 
 namespace dawn
 {
-    struct PosixRobustMutex
-    {
-        PosixRobustMutex();
+struct PosixRobustMutex
+{
+    PosixRobustMutex();
 
-        ~PosixRobustMutex();
+    ~PosixRobustMutex();
 
-        bool isInitialized() const;
+    bool isInitialized() const;
 
-        bool initialize();
+    bool initialize();
 
-        int lock();
+    int lock();
 
-        void unlock();
+    void unlock();
 
-        int tryLock();
+    int tryLock();
 
-        bool recover();
+    bool recover();
 
-        pthread_mutex_t mutex_;
-        std::atomic_bool is_initialized_{false};
-        std::atomic_bool is_initializing_{false};
-        // std::atomic_bool is_locked_{false};
-    };
+    pthread_mutex_t mutex_;
+    std::atomic_bool is_initialized_{false};
+    std::atomic_bool is_initializing_{false};
+    // std::atomic_bool is_locked_{false};
+};
 
 }  // namespace dawn
 

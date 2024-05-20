@@ -5,23 +5,23 @@
 namespace dawn
 {
 
-    const int INTEGER_TYPE_32_BIT = 32;
-    inline int getTopBitPosition(uint32_t number)
+const int INTEGER_TYPE_32_BIT = 32;
+inline int getTopBitPosition(uint32_t number)
+{
+    if (number != 0)
     {
-        if (number != 0)
+        int factor = 0;
+        for (int i = INTEGER_TYPE_32_BIT / 2; i > 0; i = i / 2)
         {
-            int factor = 0;
-            for (int i = INTEGER_TYPE_32_BIT / 2; i > 0; i = i / 2)
+            if (number >> ((factor ^ i)))
             {
-                if (number >> ((factor ^ i)))
-                {
-                    factor ^= i;
-                }
+                factor ^= i;
             }
-            return factor;
         }
-        return 0;
+        return factor;
     }
-
+    return 0;
 }
+
+}  // namespace dawn
 #endif

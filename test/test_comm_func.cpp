@@ -18,10 +18,7 @@ TEST(test_dawn, test_thread_pool)
         threadPool pool;
         pool.init();
         pool.runAllThreads();
-        auto test_func = []()
-        {
-            std::cout << "test_func" << std::endl;
-        };
+        auto test_func = []() { std::cout << "test_func" << std::endl; };
         pool.pushWorkQueue(test_func);
         std::this_thread::sleep_for(std::chrono::seconds(1));
     }
@@ -203,7 +200,8 @@ TEST(test_dawn, dawn_single_thread_memory_pool_benchmark)
     std::cout << "dawn memory pool spend time " << total_time_span / loop_time << " cycles" << std::endl;
 }
 
-/// @note Need to set CMAKE_BUILD_TYPE is Debug, otherwise malloc step will be optimized.
+/// @note Need to set CMAKE_BUILD_TYPE is Debug, otherwise malloc step will be
+/// optimized.
 TEST(test_dawn, malloc_func)
 {
     using namespace dawn;

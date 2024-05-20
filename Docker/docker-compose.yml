@@ -8,4 +8,4 @@ services:
     privileged: true
     volumes:
       #map host folder to container
-      - /f/project/git_project/my_project/dawn:/home/DAWN/workspace:rw
+      - /home/pan/workspace:/home/pan/workspace:rw

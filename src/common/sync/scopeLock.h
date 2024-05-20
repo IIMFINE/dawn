@@ -2,41 +2,35 @@
 #define __SCOPE_LOCK_H__
 namespace dawn
 {
-    struct PosixRobustMutex;
+struct PosixRobustMutex;
 
-    template <typename MUTEX_T>
-    struct ScopeLock
+template <typename MUTEX_T>
+struct ScopeLock
+{
+    ScopeLock(MUTEX_T &mutex) : mutex_(mutex) { mutex_.lock(); }
+
+    ~ScopeLock() { mutex_.unlock(); }
+
+    bool lock()
     {
-        ScopeLock(MUTEX_T &mutex) : mutex_(mutex)
-        {
-            mutex_.lock();
-        }
+        mutex_.lock();
+        return true;
+    }
 
-        ~ScopeLock()
-        {
-            mutex_.unlock();
-        }
+    bool unlock()
+    {
+        mutex_.unlock();
+        return true;
+    }
 
-        bool lock()
-        {
-            mutex_.lock();
-            return true;
-        }
+    MUTEX_T &mutex_;
+};
 
-        bool unlock()
-        {
-            mutex_.unlock();
-            return true;
-        }
+template <>
+bool ScopeLock<PosixRobustMutex>::lock();
 
-        MUTEX_T &mutex_;
-    };
-
-    template <>
-    bool ScopeLock<PosixRobustMutex>::lock();
-
-    template <>
-    bool ScopeLock<PosixRobustMutex>::unlock();
+template <>
+bool ScopeLock<PosixRobustMutex>::unlock();
 
 }  // namespace dawn
 #endif

@@ -19,21 +19,21 @@
 
 namespace dawn
 {
-    struct logManager_t
-    {
-        logManager_t();
+struct logManager_t
+{
+    logManager_t();
 
-        ~logManager_t();
+    ~logManager_t();
 
-        void init_spdlog(std::string_view prefix_filename = std::string_view{});
-        void set_prefix_name();
-        static logManager_t& return_log_manager();
-        static std::shared_ptr<spdlog::logger> return_logger();
-        static struct tm* return_timestamp();
-        std::shared_ptr<spdlog::logger> spd_logger_;
-    };
-
+    void init_spdlog(std::string_view prefix_filename = std::string_view{});
+    void set_prefix_name();
+    static logManager_t& return_log_manager();
+    static std::shared_ptr<spdlog::logger> return_logger();
+    static struct tm* return_timestamp();
+    std::shared_ptr<spdlog::logger> spd_logger_;
 };
+
+};  // namespace dawn
 
 #ifndef NDEBUG
 #define LOG_DEBUG(...) SPDLOG_LOGGER_DEBUG(dawn::logManager_t::return_logger(), __VA_ARGS__);

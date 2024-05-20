@@ -6,6 +6,9 @@ project(dawn VERSION 0.1.0)
 add_compile_options(-Wall -Werror -Wno-unused-variable -g -fomit-frame-pointer)
 set(CMAKE_CXX_STANDARD 17)
 
+# provide compile_commands
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # For build share library
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 

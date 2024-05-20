@@ -29,8 +29,7 @@ TEST(test_interprocess_condition, wait_for)
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
 
-    std::thread t([&condition]()
-                  { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_SUCCESS); });
+    std::thread t([&condition]() { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_SUCCESS); });
 
     condition.notifyAll();
     t.join();
@@ -42,8 +41,7 @@ TEST(test_interprocess_condition, wait_for_timeout)
     InterprocessCondition condition;
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
-    std::thread t([&condition]()
-                  { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_FAIL); });
+    std::thread t([&condition]() { ASSERT_EQ(condition.waitFor(std::chrono::milliseconds(1000)), PROCESS_FAIL); });
 
     t.join();
 }
@@ -76,11 +74,13 @@ TEST(test_interprocess_condition, notify_wait_performance)
     for (int i = 0; i < times; i++)
     {
         std::cout << "notify wait performance test " << i << std::endl;
-        std::thread t([&condition, &start_notify]()
-                      {
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-      start_notify = std::chrono::high_resolution_clock::now();
-      ASSERT_EQ(condition.notifyAll(), PROCESS_SUCCESS); });
+        std::thread t(
+            [&condition, &start_notify]()
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                start_notify = std::chrono::high_resolution_clock::now();
+                ASSERT_EQ(condition.notifyAll(), PROCESS_SUCCESS);
+            });
         ASSERT_EQ(condition.wait(), PROCESS_SUCCESS);
         wait_notify = std::chrono::high_resolution_clock::now();
         t.join();
@@ -98,10 +98,7 @@ TEST(test_interprocess_condition, wait_for_condition)
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
 
-    std::thread t([&condition]()
-                  { ASSERT_EQ(condition.wait([]()
-                                             { return true; }),
-                              PROCESS_SUCCESS); });
+    std::thread t([&condition]() { ASSERT_EQ(condition.wait([]() { return true; }), PROCESS_SUCCESS); });
 
     condition.notifyAll();
     t.join();
@@ -114,10 +111,7 @@ TEST(test_interprocess_condition, wait_for_condition_false)
     std::string identity = "test";
     ASSERT_EQ(condition.init(identity), PROCESS_SUCCESS);
 
-    std::thread t([&condition]()
-                  { ASSERT_EQ(condition.wait([]()
-                                             { return false; }),
-                              PROCESS_SUCCESS); });
+    std::thread t([&condition]() { ASSERT_EQ(condition.wait([]() { return false; }), PROCESS_SUCCESS); });
 
     condition.notifyAll();
     t.join();

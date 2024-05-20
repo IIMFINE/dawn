@@ -18,12 +18,14 @@ TEST(test_posix_robust_mutex, intraprocess_deadlock)
 {
     dawn::PosixRobustMutex mutex;
 
-    std::thread thread([&mutex]()
-                       {
-        if (auto ret = mutex.lock() == 0)
+    std::thread thread(
+        [&mutex]()
         {
-          LOG_INFO("mutex is locked");
-        } });
+            if (auto ret = mutex.lock() == 0)
+            {
+                LOG_INFO("mutex is locked");
+            }
+        });
 
     thread.join();
     if (mutex.lock() == EOWNERDEAD)

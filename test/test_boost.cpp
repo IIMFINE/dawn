@@ -19,10 +19,7 @@
 #include "gtest/gtest.h"
 #include "test_helper.h"
 
-TEST(test_core_dump, test_core_dump)
-{
-    raise(SIGABRT);
-}
+TEST(test_core_dump, test_core_dump) { raise(SIGABRT); }
 
 namespace BI = boost::interprocess;
 
@@ -83,19 +80,17 @@ TEST(test_boost, create_named_semaphore_shm)
 {
     using namespace BI;
     named_semaphore semaphore(open_or_create, "hello_world_dawn", 0);
-    // shared_memory_object segment(open_or_create, "hello_world_dawn", read_write);
-    // segment.truncate(256);
-    // mapped_region region(segment, read_write);
-    // auto mem = reinterpret_cast<char*>(region.get_address());
+    // shared_memory_object segment(open_or_create, "hello_world_dawn",
+    // read_write); segment.truncate(256); mapped_region region(segment,
+    // read_write); auto mem = reinterpret_cast<char*>(region.get_address());
 }
 
 TEST(test_boost, boost_version)
 {
     // std::cout << BOOST_VERSION << std::endl;
-    std::cout << "Using Boost "
-              << BOOST_VERSION / 100000 << "."      // major version
-              << BOOST_VERSION / 100 % 1000 << "."  // minor version
-              << BOOST_VERSION % 100                // patch level
+    std::cout << "Using Boost " << BOOST_VERSION / 100000 << "."  // major version
+              << BOOST_VERSION / 100 % 1000 << "."                // minor version
+              << BOOST_VERSION % 100                              // patch level
               << std::endl;
 }
 
@@ -312,9 +307,7 @@ TEST(test_boost, test_scoped_lock_upgradable)
 
 struct lock_guard
 {
-    lock_guard(BI::named_mutex &&mutex) : lock(mutex)
-    {
-    }
+    lock_guard(BI::named_mutex &&mutex) : lock(mutex) {}
     ~lock_guard()
     {
         std::cout << "destruct" << std::endl;
@@ -383,13 +376,12 @@ TEST(test_boost, test_named_recursive_mutex)
     boost::interprocess::named_recursive_mutex mutex(boost::interprocess::open_or_create, "test_recursive_mutex");
     auto func = [&]()
     {
-        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock(mutex);
-        // std::cout << "**lock** " << std::endl;
-        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock2(mutex);
-        // std::cout << "**lock2** " << std::endl;
-        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex> lock3(mutex);
-        // std::cout << "**lock3** " << std::endl;
-        // lock3.unlock();
+        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
+        // lock(mutex); std::cout << "**lock** " << std::endl;
+        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
+        // lock2(mutex); std::cout << "**lock2** " << std::endl;
+        // boost::interprocess::scoped_lock<boost::interprocess::named_recursive_mutex>
+        // lock3(mutex); std::cout << "**lock3** " << std::endl; lock3.unlock();
         mutex.lock();
         std::cout << "**lock**" << std::endl;
         mutex.lock();

@@ -27,8 +27,7 @@ TEST(test_dawn, test_shmTp_read_loop_block)
             {
                 LOG_INFO("receive data {}", data);
                 std::cout << "receive data " << data << std::endl;
-                std::cout << "receive data len " << len << std::endl
-                          << std::endl;
+                std::cout << "receive data len " << len << std::endl << std::endl;
             }
             delete data;
         }

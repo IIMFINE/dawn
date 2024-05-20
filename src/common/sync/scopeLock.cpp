@@ -3,16 +3,16 @@
 
 namespace dawn
 {
-    template <>
-    bool ScopeLock<PosixRobustMutex>::lock()
-    {
-        return true;
-    }
+template <>
+bool ScopeLock<PosixRobustMutex>::lock()
+{
+    return true;
+}
 
-    template <>
-    bool ScopeLock<PosixRobustMutex>::unlock()
-    {
-        return true;
-    }
+template <>
+bool ScopeLock<PosixRobustMutex>::unlock()
+{
+    return true;
+}
 
 }  // namespace dawn
