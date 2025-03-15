@@ -1,0 +1,10 @@
+services:
+  dawn_app:
+    container_name: "dawn_app"
+    image: simplepan/dawn_dev
+    tty: true
+    #privileged must be true
+    privileged: true
+    volumes:
+      #map host folder to container
+      - /home/pan/project:/home/DAWN/workspace:rw

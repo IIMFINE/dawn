@@ -1,7 +1,7 @@
+#include <chrono>
+#include <functional>
 #include <iostream>
-
-#include "common/heap.h"
-#include "common/setLogger.h"
+#include "common/set_logger.h"
 #include "common/timer.h"
 #include "gtest/gtest.h"
 #include "test_helper.h"

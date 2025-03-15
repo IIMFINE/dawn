@@ -1,12 +1,13 @@
-#include <array>
 #include <chrono>
-#include <future>
+#include <iostream>
 #include <string>
 #include <thread>
+#include <vector>
 
-#include "common/setLogger.h"
+#include "common/set_logger.h"
+#include "transport/shm_transport.h"
 #include "gtest/gtest.h"
-#include "transport/shmTransportController.h"
+#include "test_helper.h"
 
 TEST(test_dawn, test_shmTp_read_loop_block)
 {
@@ -89,24 +90,24 @@ TEST(test_dawn, test_shmTp_read_one_slot_block_multi_thread)
     using TP = abstractTransport;
     shmTransport shm_tp("hello_world_dawn");
     auto func = [&]()
-    {
-        while (1)
         {
-            char* data = new char[9 * 1024 * 1024];
-            uint32_t len = 0;
-            if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
+            while (1)
             {
-                std::cout << "failed" << std::endl;
+                char* data = new char[9 * 1024 * 1024];
+                uint32_t len = 0;
+                if (shm_tp.read(data, len, TP::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
+                {
+                    std::cout << "failed" << std::endl;
+                }
+                else
+                {
+                    LOG_INFO("receive data {}", data);
+                    std::cout << "receive data " << data << std::endl;
+                    std::cout << "len " << len << std::endl;
+                }
+                delete data;
             }
-            else
-            {
-                LOG_INFO("receive data {}", data);
-                std::cout << "receive data " << data << std::endl;
-                std::cout << "len " << len << std::endl;
-            }
-            delete data;
-        }
-    };
+        };
     std::thread(func).detach();
     std::thread(func).detach();
     std::thread(func).detach();
@@ -198,19 +199,19 @@ TEST(test_dawn, test_shmTp_write_small_data_loop_multithread)
     std::atomic<uint32_t> index = 0;
     uint32_t loop_time = 0xffff;
     auto func = [&]()
-    {
-        for (uint32_t i = 0; i < loop_time; i++)
         {
-            std::string data = "helloWorld";
-            data += std::to_string(index.load());
-            index++;
-            std::cout << "publish data " << data << std::endl;
-            if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+            for (uint32_t i = 0; i < loop_time; i++)
             {
-                std::cout << "failed" << std::endl;
+                std::string data = "helloWorld";
+                data += std::to_string(index.load());
+                index++;
+                std::cout << "publish data " << data << std::endl;
+                if (shm_tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+                {
+                    std::cout << "failed" << std::endl;
+                }
             }
-        }
-    };
+        };
 
     std::thread(func).detach();
     std::thread(func).detach();
@@ -274,25 +275,25 @@ TEST(test_dawn, shmTpReliableReadLoopMultiThread)
     SET_LOGGER_FILENAME("read");
     shmTransport tp("hello_dawn", std::make_shared<qosCfg>(qosCfg::QOS_TYPE::RELIABLE));
     auto func = [&]()
-    {
-        std::array<char, 9 * 1024> data;
-        uint32_t len = 0;
-        uint32_t count = 0xfff;
-        for (uint32_t i = 0; i < count; ++i)
         {
-            if (tp.read(data.data(), len, abstractTransport::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
+            std::array<char, 9 * 1024> data;
+            uint32_t len = 0;
+            uint32_t count = 0xfff;
+            for (uint32_t i = 0; i < count; ++i)
             {
-                std::cout << "failed" << std::endl;
+                if (tp.read(data.data(), len, abstractTransport::BLOCKING_TYPE::BLOCK) == PROCESS_FAIL)
+                {
+                    std::cout << "failed" << std::endl;
+                }
+                else
+                {
+                    LOG_INFO("receive data {}", data.data());
+                    std::cout << "receive data " << data.data() << std::endl;
+                    std::memset(data.data(), 0, data.size());
+                    // std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
             }
-            else
-            {
-                LOG_INFO("receive data {}", data.data());
-                std::cout << "receive data " << data.data() << std::endl;
-                std::memset(data.data(), 0, data.size());
-                // std::this_thread::sleep_for(std::chrono::milliseconds(500));
-            }
-        }
-    };
+        };
 
     auto future1 = std::async(std::launch::async, func);
     auto future2 = std::async(std::launch::async, func);
@@ -353,25 +354,25 @@ TEST(test_dawn, shmTpReliableWriteLoopMultiThreads)
     std::atomic<uint32_t> index(0);
     std::atomic<uint32_t> threadNum(4);
     auto func = [&]()
-    {
-        for (uint32_t i = 0; i < count; i++)
         {
-            std::string data = "hello world";
-            data = "hello world" + std::to_string(index.load());
-            index++;
-            if (tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+            for (uint32_t i = 0; i < count; i++)
             {
-                std::cout << "failed" << std::endl;
+                std::string data = "hello world";
+                data = "hello world" + std::to_string(index.load());
+                index++;
+                if (tp.write(data.c_str(), data.size()) == PROCESS_FAIL)
+                {
+                    std::cout << "failed" << std::endl;
+                }
+                else
+                {
+                    LOG_INFO("send data {}", data);
+                    // std::cout << "send data " << data << std::endl;
+                }
+                // std::this_thread::sleep_for(std::chrono::milliseconds(100));
             }
-            else
-            {
-                LOG_INFO("send data {}", data);
-                // std::cout << "send data " << data << std::endl;
-            }
-            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        threadNum--;
-    };
+            threadNum--;
+        };
 
     for (int i = 0; i < 4; i++)
     {

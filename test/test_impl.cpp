@@ -3,13 +3,13 @@
 #include <future>
 #include <iostream>
 
-#include "common/memoryPool.h"
+#include "common/memory_pool.h"
 #include "common/multicast.h"
 #include "discovery/discovery.h"
 #include "gtest/gtest.h"
 #include "test_helper.h"
-#include "transport/qosController.h"
-#include "transport/shmTransport.h"
+#include "transport/qos_controller.h"
+#include "transport/shm_transport.h"
 
 TEST(test_dawn, test_multicast_rx)
 {

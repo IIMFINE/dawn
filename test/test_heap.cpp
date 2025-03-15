@@ -1,7 +1,7 @@
-#include "common/baseOperator.h"
+#include "common/base_operator.h"
 #include "common/heap.h"
-#include "common/memoryPool.h"
-#include "common/threadPool.h"
+#include "common/memory_pool.h"
+#include "common/thread_pool.h"
 #include "gtest/gtest.h"
 #include "test_helper.h"
 

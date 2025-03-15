@@ -1,9 +1,10 @@
-#include "discovery/discovery.h"
+#include "discovery.h"
 
 #include <functional>
 #include <memory>
 
-#include "common/memoryPool.h"
+// Update camelCase header name to snake_case
+#include "common/memory_pool.h"
 
 namespace dawn
 {

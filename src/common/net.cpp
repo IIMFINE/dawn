@@ -7,7 +7,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "setLogger.h"
+#include "set_logger.h"
 
 namespace dawn
 {

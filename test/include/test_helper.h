@@ -1,11 +1,14 @@
-#ifndef _TEST_HELPER_H_
-#define _TEST_HELPER_H_
-#include <x86intrin.h>
+#pragma once
 
 #include <chrono>
-#include <map>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <string>
+#include <x86intrin.h>
 
-#include "common/setLogger.h"
+#include "common/set_logger.h"
+#include "gtest/gtest.h"
 
 namespace dawn
 {
@@ -130,4 +133,3 @@ inline int getTopBitPosition_2(uint32_t number)
 }
 }  // namespace test
 }  // namespace dawn
-#endif

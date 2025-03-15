@@ -4,11 +4,11 @@
 #include <chrono>
 #include <condition_variable>
 
-#include "funcWrapper.h"
-#include "hazardPointer.h"
+#include "func_wrapper.h"
+#include "hazard_pointer.h"
 #include "heap.h"
-#include "setLogger.h"
-#include "threadPool.h"
+#include "set_logger.h"
+#include "thread_pool.h"
 
 namespace dawn
 {

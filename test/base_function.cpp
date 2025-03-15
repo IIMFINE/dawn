@@ -21,11 +21,11 @@
 #include <type_traits>
 #include <vector>
 
-#include "baseOperator.h"
-#include "hazardPointer.h"
-#include "memoryPool.h"
-#include "setLogger.h"
-#include "threadPool.h"
+#include "base_operator.h"
+#include "hazard_pointer.h"
+#include "memory_pool.h"
+#include "set_logger.h"
+#include "thread_pool.h"
 #include "type.h"
 
 int main()
